@@ -5,16 +5,16 @@ use std::fmt::{Debug, Formatter, Error};
 
 struct Request {
     id: usize,
-    arrivalTS: usize,
-    totalServieTime: usize,
-    remainingServiceTime: usize,
+    arrival_time: usize,
+    total_service: usize,
+    remaining_service: usize,
     timedout: bool,
 }
 impl Debug for Request {
     fn fmt(&self, f:&mut Formatter) -> Result<(), Error> {
-        f.write_fmt(format_args!("Request(id: {}, arrTS: {}, totST: {}, remST: {}, tout: {})",
-                                self.id, self.arrivalTS, self.totalServieTime,
-                                self.remainingServiceTime, self.timedout))
+        f.write_fmt(format_args!("Request(id: {}, arr: {}, totST: {}, remST: {}, tOut: {})",
+                                self.id, self.arrival_time, self.total_service,
+                                self.remaining_service, self.timedout))
     }
 }
 
@@ -70,7 +70,7 @@ impl PartialOrd for Event {
 // Event }}}
 
 fn main() {
-    let r = Request { id: 23, arrivalTS: 434, totalServieTime: 12, remainingServiceTime: 12, timedout: false };
+    let r = Request { id: 23, arrival_time: 434, total_service: 12, remaining_service: 12, timedout: false };
     println!("{:?}", &r);
     assert!(EventType::Timeout > EventType::Departure);
     assert!(EventType::Arrival < EventType::Timeout);
