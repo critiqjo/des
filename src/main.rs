@@ -101,21 +101,25 @@ impl PartialOrd for Event {
 fn main() {
     use std::num::from_f64;
     use EventType::{Arrival, Timeout};
+
     let mut events = BinaryHeap::new();
     let mut rng = rand::thread_rng();
     let exp = Exp::new(1.0/8.0);
+
     let mut v = exp.ind_sample(&mut rng);
     println!("rand: {}", v);
+
     let req = Rc::new(RefCell::new(Request { id: 89, arrival_time: from_f64::<usize>(v).unwrap(), total_service: 4, remaining_service: 4 }));
-    let c = Rc::new(RefCell::new(Core { status: CoreStatus::Idle, request: None, quantum_start: 0, total_busy_time: 0 }));
-    let e = Event { _type: Arrival(req.clone()), timestamp: req.borrow().arrival_time };
+    let mut e = Event { _type: Arrival(req.clone()), timestamp: req.borrow().arrival_time };
     events.push(e);
+
     v += exp.ind_sample(&mut rng);
-    let e = Event { _type: Timeout(req.clone().downgrade()), timestamp: from_f64::<usize>(v).unwrap() };
+    e = Event { _type: Timeout(req.clone().downgrade()), timestamp: from_f64::<usize>(v).unwrap() };
     events.push(e);
-    let c = events.pop().unwrap();
-    println!("{:?}", &c);
-    let c = events.pop().unwrap();
-    println!("{:?}", &c);
+
+    let mut e = events.pop().unwrap();
+    println!("{:?}", &e);
+    e = events.pop().unwrap();
+    println!("{:?}", &e);
     assert_eq!(events.pop(), None);
 }
