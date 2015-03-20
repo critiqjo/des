@@ -17,7 +17,7 @@ struct Request {
 #[derive(Debug)]
 struct Core {
     status: CoreStatus,
-    request: Rc<RefCell<Request>>,
+    request: Option<Rc<RefCell<Request>>>,
     quantum_start: usize,
     total_busy_time: usize,
 }
@@ -27,7 +27,6 @@ enum CoreStatus {
     Idle, Busy
 }
 
-// EventType enumerator {{{
 #[derive(Debug)]
 enum EventType {
     Arrival(Rc<RefCell<Request>>),
@@ -35,6 +34,7 @@ enum EventType {
     QuantumOver(Rc<RefCell<Core>>),
     Timeout(Weak<RefCell<Request>>)
 }
+// EventType impl {{{
 impl PartialEq for EventType {
     fn eq(&self, other: &EventType) -> bool {
         use EventType::*;
@@ -61,15 +61,16 @@ impl PartialOrd for EventType {
 }
 // EventType }}}
 
-// Event structure {{{
 #[derive(Debug)]
 struct Event {
     _type: EventType,
     timestamp: usize,
 }
+// Event impl {{{
 impl PartialEq for Event {
     fn eq(&self, other: &Event) -> bool {
-        self.timestamp == other.timestamp && !(self._type.gt(&other._type) || self._type.lt(&other._type))
+        // Consider incomparable 'EventType's as equals too
+        self.timestamp == other.timestamp && !(self._type > other._type || self._type < other._type)
     }
 }
 impl Eq for Event { }
@@ -96,12 +97,15 @@ fn main() {
     use EventType::{Arrival, Departure, Timeout, QuantumOver};
     let mut events = BinaryHeap::new();
     let req = Rc::new(RefCell::new(Request { id: 89, arrival_time: 4, total_service: 4, remaining_service: 4 }));
+    let c = Rc::new(RefCell::new(Core { status: CoreStatus::Idle, request: None, quantum_start: 0, total_busy_time: 0 }));
     let e = Event { _type: Arrival(req.clone()), timestamp: 4 };
     events.push(e);
-    //let e = Event { _type: Departure(req), timestamp: 8 };
-    //events.push(e);
+    let e = Event { _type: Departure(c.clone()), timestamp: 8 };
+    events.push(e);
     let e = Event { _type: Timeout(req.clone().downgrade()), timestamp: 8 };
     events.push(e);
+    let c = events.pop().unwrap();
+    println!("{:?}", &c);
     let c = events.pop().unwrap();
     println!("{:?}", &c);
     let c = events.pop().unwrap();
