@@ -9,7 +9,6 @@ struct Request {
     arrival_time: usize,
     total_service: usize,
     remaining_service: usize,
-    timedout: bool,
 }
 
 // EventType enumerator {{{
@@ -65,8 +64,19 @@ impl PartialOrd for Event {
 // Event }}}
 
 fn main() {
-    let r = Request { id: 23, arrival_time: 434, total_service: 12, remaining_service: 12, timedout: false };
-    println!("{:?}", &r);
-    assert!(EventType::Timeout > EventType::Departure);
-    assert!(EventType::Arrival < EventType::Timeout);
+    use EventType::{Arrival, Departure, Timeout, QuantumOver};
+    let mut events = BinaryHeap::new();
+    let e = Event { _type: Arrival, timestamp: 4, request: None };
+    events.push(e);
+    let e = Event { _type: Departure, timestamp: 8, request: None };
+    events.push(e);
+    let e = Event { _type: Timeout, timestamp: 8, request: None };
+    events.push(e);
+    let c = events.pop().unwrap();
+    println!("{:?}", &c);
+    let c = events.pop().unwrap();
+    println!("{:?}", &c);
+    let c = events.pop().unwrap();
+    println!("{:?}", &c);
+    assert_eq!(events.pop(), None);
 }
