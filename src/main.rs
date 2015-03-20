@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fmt::{Debug, Formatter, Error};
 
+#[derive(Debug)]
 struct Request {
     id: usize,
     arrival_time: usize,
@@ -10,16 +11,9 @@ struct Request {
     remaining_service: usize,
     timedout: bool,
 }
-impl Debug for Request {
-    fn fmt(&self, f:&mut Formatter) -> Result<(), Error> {
-        f.write_fmt(format_args!("Request(id: {}, arr: {}, totST: {}, remST: {}, tOut: {})",
-                                self.id, self.arrival_time, self.total_service,
-                                self.remaining_service, self.timedout))
-    }
-}
 
 // EventType enumerator {{{
-#[derive(Copy, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 enum EventType {
     Arrival, Departure, QuantumOver, Timeout
 }
@@ -38,6 +32,7 @@ impl PartialOrd for EventType {
 // EventType }}}
 
 // Event structure {{{
+#[derive(Debug)]
 struct Event {
     _type: EventType,
     timestamp: usize,
