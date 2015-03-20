@@ -1,4 +1,7 @@
-use std::rc::Rc;
+#![feature(alloc)]
+// use of Weak, downgrade, strong_count
+
+use std::rc::{Rc, Weak};
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -25,18 +28,33 @@ enum CoreStatus {
 }
 
 // EventType enumerator {{{
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug)]
 enum EventType {
-    Arrival, Departure, QuantumOver, Timeout
+    Arrival(Rc<RefCell<Request>>),
+    Departure(Rc<RefCell<Core>>),
+    QuantumOver(Rc<RefCell<Core>>),
+    Timeout(Weak<RefCell<Request>>)
 }
+impl PartialEq for EventType {
+    fn eq(&self, other: &EventType) -> bool {
+        use EventType::*;
+        match (self, other) {
+            (&Arrival(_), &Arrival(_)) | (&Departure(_), &Departure(_)) |
+                (&QuantumOver(_), &QuantumOver(_)) | (&Timeout(_), &Timeout(_))
+                => true,
+            _ => false
+        }
+    }
+}
+impl Eq for EventType { }
 impl PartialOrd for EventType {
     fn partial_cmp(&self, other: &EventType) -> Option<Ordering> {
         if self.eq(&other) {
              return Some(Ordering::Equal);
         }
         match (self, other) {
-            (&EventType::Timeout, _) => Some(Ordering::Greater),
-            (_, &EventType::Timeout) => Some(Ordering::Less),
+            (&EventType::Timeout(_), _) => Some(Ordering::Greater),
+            (_, &EventType::Timeout(_)) => Some(Ordering::Less),
             _ => None,
         }
     }
@@ -48,8 +66,6 @@ impl PartialOrd for EventType {
 struct Event {
     _type: EventType,
     timestamp: usize,
-    request: Option<RefCell<Request>>,
-    //core: Option<RefCell<Core>>
 }
 impl PartialEq for Event {
     fn eq(&self, other: &Event) -> bool {
@@ -79,14 +95,13 @@ impl PartialOrd for Event {
 fn main() {
     use EventType::{Arrival, Departure, Timeout, QuantumOver};
     let mut events = BinaryHeap::new();
-    let e = Event { _type: Arrival, timestamp: 4, request: None };
+    let req = Rc::new(RefCell::new(Request { id: 89, arrival_time: 4, total_service: 4, remaining_service: 4 }));
+    let e = Event { _type: Arrival(req.clone()), timestamp: 4 };
     events.push(e);
-    let e = Event { _type: Departure, timestamp: 8, request: None };
+    //let e = Event { _type: Departure(req), timestamp: 8 };
+    //events.push(e);
+    let e = Event { _type: Timeout(req.clone().downgrade()), timestamp: 8 };
     events.push(e);
-    let e = Event { _type: Timeout, timestamp: 8, request: None };
-    events.push(e);
-    let c = events.pop().unwrap();
-    println!("{:?}", &c);
     let c = events.pop().unwrap();
     println!("{:?}", &c);
     let c = events.pop().unwrap();
