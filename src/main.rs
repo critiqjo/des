@@ -1,7 +1,7 @@
+use std::rc::Rc;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
-use std::fmt::{Debug, Formatter, Error};
 
 #[derive(Debug)]
 struct Request {
@@ -9,6 +9,19 @@ struct Request {
     arrival_time: usize,
     total_service: usize,
     remaining_service: usize,
+}
+
+#[derive(Debug)]
+struct Core {
+    status: CoreStatus,
+    request: Rc<RefCell<Request>>,
+    quantum_start: usize,
+    total_busy_time: usize,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+enum CoreStatus {
+    Idle, Busy
 }
 
 // EventType enumerator {{{
