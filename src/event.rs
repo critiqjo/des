@@ -43,7 +43,7 @@ impl PartialOrd for EventType {
 #[derive(Debug)]
 pub struct Event {
     pub _type: EventType,
-    pub timestamp: usize,
+    pub timestamp: f64,
 }
 // Event impl {{{
 impl PartialEq for Event {
@@ -59,7 +59,7 @@ impl Ord for Event {
             return Ordering::Equal;
         }
         // Notice that the we flip the ordering here to make it a min-heap
-        match other.timestamp.cmp(&self.timestamp) {
+        match other.timestamp.partial_cmp(&self.timestamp).unwrap() {
             Ordering::Equal => self._type.partial_cmp(&other._type).unwrap(),
             ord => ord,
         }

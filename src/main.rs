@@ -22,14 +22,13 @@ fn main() {
     let exp = Exp::new(1.0/8.0);
 
     let mut v = exp.ind_sample(&mut rng);
-    println!("rand: {}", v);
 
-    let req = Rc::new(RefCell::new(Request { id: 89, arrival_time: v as usize, total_service: 4, remaining_service: 4 }));
+    let req = Rc::new(RefCell::new(Request { id: 89, arrival_time: v, total_service: 4.0, remaining_service: 4.0 }));
     let mut e = Event { _type: EventType::Arrival(req.clone()), timestamp: req.borrow().arrival_time };
     events.push(e);
 
     v += exp.ind_sample(&mut rng);
-    e = Event { _type: EventType::Timeout(req.clone().downgrade()), timestamp: v as usize };
+    e = Event { _type: EventType::Timeout(req.clone().downgrade()), timestamp: v };
     events.push(e);
 
     let mut e = events.pop().unwrap();
