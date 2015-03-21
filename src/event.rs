@@ -15,11 +15,12 @@ pub enum EventType {
 // EventType impl {{{
 impl PartialEq for EventType {
     fn eq(&self, other: &EventType) -> bool {
-        //        use EventType::*;
+        use self::EventType::*;
         match (self, other) {
-            (&EventType::Arrival(_), &EventType::Arrival(_)) | (&EventType::Departure(_), &EventType::Departure(_)) |
-                (&EventType::QuantumOver(_), &EventType::QuantumOver(_)) | (&EventType::Timeout(_), &EventType::Timeout(_))
-                => true,
+            (&Arrival(_), &Arrival(_)) |
+                (&Departure(_), &Departure(_)) |
+                (&QuantumOver(_), &QuantumOver(_)) |
+                (&Timeout(_), &Timeout(_)) => true,
                 _ => false
         }
     }
