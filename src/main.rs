@@ -1,13 +1,12 @@
 #![feature(alloc)]
 // use of Weak, downgrade, strong_count
 
-extern crate rand;
-
 use std::rc::{Rc, Weak};
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
-use rand::Rng;
+
+extern crate rand;
 use rand::distributions::IndependentSample;
 use rand::distributions::exponential::Exp;
 
@@ -99,7 +98,6 @@ impl PartialOrd for Event {
 // Event }}}
 
 fn main() {
-    use std::num::from_f64;
     use EventType::{Arrival, Timeout};
 
     let mut events = BinaryHeap::new();
@@ -109,12 +107,12 @@ fn main() {
     let mut v = exp.ind_sample(&mut rng);
     println!("rand: {}", v);
 
-    let req = Rc::new(RefCell::new(Request { id: 89, arrival_time: from_f64::<usize>(v).unwrap(), total_service: 4, remaining_service: 4 }));
+    let req = Rc::new(RefCell::new(Request { id: 89, arrival_time: v as usize, total_service: 4, remaining_service: 4 }));
     let mut e = Event { _type: Arrival(req.clone()), timestamp: req.borrow().arrival_time };
     events.push(e);
 
     v += exp.ind_sample(&mut rng);
-    e = Event { _type: Timeout(req.clone().downgrade()), timestamp: from_f64::<usize>(v).unwrap() };
+    e = Event { _type: Timeout(req.clone().downgrade()), timestamp: v as usize };
     events.push(e);
 
     let mut e = events.pop().unwrap();
