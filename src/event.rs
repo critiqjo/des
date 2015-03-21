@@ -1,8 +1,10 @@
-use core::Core;
-use request::Request;
 use std::rc::{Rc, Weak};
 use std::cell::RefCell;
 use std::cmp::Ordering;
+
+use core::Core;
+use request::Request;
+
 #[derive(Debug)]
 pub enum EventType {
     Arrival(Rc<RefCell<Request>>),
@@ -52,7 +54,7 @@ impl PartialEq for Event {
 impl Eq for Event { }
 impl Ord for Event {
     fn cmp(&self, other: &Event) -> Ordering {
-        if self.eq(&other) {
+        if self == other {
             return Ordering::Equal;
         }
         // Notice that the we flip the ordering here to make it a min-heap
@@ -67,3 +69,5 @@ impl PartialOrd for Event {
         Some(self.cmp(other))
     }
 }
+// Event }}}
+

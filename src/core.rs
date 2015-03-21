@@ -1,6 +1,8 @@
-use request::Request;
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 use std::cell::RefCell;
+
+use request::Request;
+
 #[derive(Debug)]
 pub struct Core {
     pub status: CoreStatus,
@@ -9,8 +11,7 @@ pub struct Core {
     pub total_busy_time: usize,
 }
 
-
 #[derive(Debug, Eq, PartialEq)]
-enum CoreStatus {
+pub enum CoreStatus {
     Idle, Busy
 }

@@ -1,24 +1,20 @@
 #![feature(alloc)]
-//Modules
-mod request;
-mod core;
-mod event;
+// suppress warning when using Weak, downgrade, strong_count
 
-// use of Weak, downgrade, strong_count
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 use std::cell::RefCell;
-use std::cmp::Ordering;
 use std::collections::BinaryHeap;
-
 
 extern crate rand;
 use rand::distributions::IndependentSample;
 use rand::distributions::exponential::Exp;
 
-
-use request::*;
+mod core;
+mod event;
+mod request;
 use core::Core;
 use event::{Event, EventType};
+use request::Request;
 
 fn main() {
     let mut events = BinaryHeap::new();
@@ -42,3 +38,4 @@ fn main() {
     println!("{:?}", &e);
     assert_eq!(events.pop(), None);
 }
+
