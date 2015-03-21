@@ -9,10 +9,10 @@ extern crate rand;
 use rand::distributions::IndependentSample;
 use rand::distributions::exponential::Exp;
 
-mod core;
+mod cpu;
 mod event;
 mod request;
-use core::Core;
+use cpu::{Cpu, CpuState};
 use event::{Event, EventType};
 use request::Request;
 

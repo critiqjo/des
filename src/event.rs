@@ -2,14 +2,14 @@ use std::rc::{Rc, Weak};
 use std::cell::RefCell;
 use std::cmp::Ordering;
 
-use core::Core;
+use cpu::Cpu;
 use request::Request;
 
 #[derive(Debug)]
 pub enum EventType {
     Arrival(Rc<RefCell<Request>>),
-    Departure(Rc<RefCell<Core>>),
-    QuantumOver(Rc<RefCell<Core>>),
+    Departure(Rc<RefCell<Cpu>>),
+    QuantumOver(Rc<RefCell<Cpu>>),
     Timeout(Weak<RefCell<Request>>)
 }
 // EventType impl {{{
