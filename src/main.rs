@@ -90,7 +90,7 @@ fn main() {
                 println!("T={} Arrival({:?})", sys.time, &rc_req);
                 if let Some(rc_cpu) = idle_cpus.pop() {
                     events.push(proc_req(rc_cpu, rc_req, sys.time));
-                } else if (tpool.len() < THREADPOOL_SIZE) {
+                } else if (tpool.len() + N_CPU < THREADPOOL_SIZE) {
                     tpool.push_back(rc_req);
                 } else if (rbuff.len() < BUFFER_CAPACITY) {
                     rbuff.push_back(rc_req);
