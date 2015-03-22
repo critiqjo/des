@@ -118,7 +118,12 @@ fn main() {
                     rbuff.push_back(rc_req);
                 } else {
                     sys.n_req_drops += 1;
-                    // TODO client retries here
+                    let (arrival_e, timeout_e) = sched_new_arrival(sys.time,
+                                                                   &retry_think_sampler,
+                                                                   &service_sampler,
+                                                                   &timeout_sampler, &mut rng);
+                    events.push(arrival_e);
+                    events.push(timeout_e);
                 }
             },
             Departure(rc_cpu) => {
@@ -171,7 +176,12 @@ fn main() {
                 Some(rc_req) => {
                     println!("T={} Timeout({:?})", sys.time, &rc_req);
                     sys.n_req_timeo += 1;
-                    // TODO client retries here
+                    let (arrival_e, timeout_e) = sched_new_arrival(sys.time,
+                                                                   &retry_think_sampler,
+                                                                   &service_sampler,
+                                                                   &timeout_sampler, &mut rng);
+                    events.push(arrival_e);
+                    events.push(timeout_e);
                 },
                 None => {}
             },
