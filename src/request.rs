@@ -1,6 +1,3 @@
-use rand::ThreadRng;
-use rand::distributions::IndependentSample;
-
 #[derive(Debug)]
 pub struct Request {
     pub id: usize,
@@ -11,12 +8,12 @@ pub struct Request {
 
 static mut next_id:usize = 0;
 impl Request {
-    pub fn new<A: IndependentSample<f64>, S: IndependentSample<f64>>
-        (now: f64, arrival_sampler: &A, service_sampler: &S, rng: &mut ThreadRng) -> Request {
+    pub fn new(arrival_ts: f64, service_time: f64) -> Request {
         unsafe { next_id += 1; }
-        let arrival = now + arrival_sampler.ind_sample(rng);
-        let service = service_sampler.ind_sample(rng);
-        Request { id: unsafe { next_id }, arrival_time: arrival, total_service: service, remaining_service: service }
+        Request { id: unsafe { next_id },
+                  arrival_time: arrival_ts,
+                  total_service: service_time,
+                  remaining_service: service_time }
     }
 }
 

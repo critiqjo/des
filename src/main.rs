@@ -8,7 +8,6 @@ use std::collections::BinaryHeap;
 use std::collections::VecDeque;
 
 extern crate rand;
-use rand::ThreadRng;
 use rand::distributions::IndependentSample;
 use rand::distributions::{Exp, Normal, Range};
 
@@ -54,27 +53,10 @@ fn event_after_proc(rc_req: Rc<RefCell<Request>>, rc_cpu: Rc<RefCell<Cpu>>, syst
     let quantum = QUANTUM; // randomized?
     let rem_serv = rc_req.borrow().remaining_service;
     if rem_serv < quantum {
-        Event { _type: EventType::Departure(rc_cpu.clone()), timestamp: systime + rem_serv }
+        Event::new(EventType::Departure(rc_cpu.clone()), systime + rem_serv)
     } else {
-        Event { _type: EventType::QuantumOver(rc_cpu.clone()), timestamp: systime + quantum }
+        Event::new(EventType::QuantumOver(rc_cpu.clone()), systime + quantum)
     }
-}
-
-fn sched_new_arrival<A: IndependentSample<f64>,
-                     S: IndependentSample<f64>,
-                     T: IndependentSample<f64>>
-                    (time: f64, arrival_sampler: &A,
-                                service_sampler: &S,
-                                timeout_sampler: &T,
-                                rng: &mut ThreadRng) -> (Event, Event) {
-    let req = Rc::new(RefCell::new(Request::new(time, arrival_sampler, service_sampler, rng)));
-
-    let arrival_ts = req.borrow().arrival_time;
-    let arrival_e = Event { _type: EventType::Arrival(req.clone()), timestamp: arrival_ts };
-
-    let timeout_ts = arrival_ts + timeout_sampler.ind_sample(rng);
-    let timeout_e = Event { _type: EventType::Timeout(req.clone().downgrade()), timestamp: timeout_ts };
-    (arrival_e, timeout_e)
 }
 
 fn main() {
@@ -95,10 +77,10 @@ fn main() {
     let retry_think_sampler = Normal::new(RETRY_THINK_TIME_MEAN, RETRY_THINK_TIME_STD_DEV);
 
     for _ in 0..N_USERS {
-        let (arrival_e, timeout_e) = sched_new_arrival(sys.time,
-                                                       &ease_in_sampler,
-                                                       &service_sampler,
-                                                       &timeout_sampler, &mut rng);
+        let arrival_ts = sys.time + ease_in_sampler.ind_sample(&mut rng);
+        let total_service = service_sampler.ind_sample(&mut rng);
+        let timeout = timeout_sampler.ind_sample(&mut rng);
+        let (arrival_e, timeout_e) = Event::new_arrival(arrival_ts, total_service, timeout);
         events.push(arrival_e);
         events.push(timeout_e);
     }
@@ -109,7 +91,7 @@ fn main() {
         sys.time = e.timestamp;
         match e._type {
             Arrival(rc_req) => {
-                println!("T={} Arrival({:?})", sys.time, &rc_req);
+                //println!("T={} Arrival({:?})", sys.time, &rc_req);
                 if let Some(rc_cpu) = idle_cpus.pop() {
                     events.push(event_after_proc(rc_req, rc_cpu, sys.time));
                 } else if (tpool.len() + N_CPU < THREADPOOL_SIZE) {
@@ -118,16 +100,20 @@ fn main() {
                     rbuff.push_back(rc_req);
                 } else {
                     sys.n_req_drops += 1;
-                    let (arrival_e, timeout_e) = sched_new_arrival(sys.time,
-                                                                   &retry_think_sampler,
-                                                                   &service_sampler,
-                                                                   &timeout_sampler, &mut rng);
+                    // The client cannot know the request was dropped right away.
+                    // Therefore waits for a timeout, and then a retry think time,
+                    // before issuing a new request.
+                    let arrival_ts = sys.time + timeout_sampler.ind_sample(&mut rng) +
+                                                retry_think_sampler.ind_sample(&mut rng);
+                    let total_service = service_sampler.ind_sample(&mut rng);
+                    let timeout = timeout_sampler.ind_sample(&mut rng);
+                    let (arrival_e, timeout_e) = Event::new_arrival(arrival_ts, total_service, timeout);
                     events.push(arrival_e);
                     events.push(timeout_e);
                 }
             },
             Departure(rc_cpu) => {
-                println!("T={} Departure({:?})", sys.time, &rc_cpu);
+                //println!("T={} Departure({:?})", sys.time, &rc_cpu);
                 {
                     let mut cpu = rc_cpu.borrow_mut();
                     let rc_req = match cpu.state {
@@ -135,10 +121,10 @@ fn main() {
                         CpuState::Idle => panic!("At the time of departure, CPU should not be IDLE."),
                     };
                     if weak_count(&rc_req) != 0 { // Was not timed out
-                        let (arrival_e, timeout_e) = sched_new_arrival(sys.time,
-                                                                       &think_sampler,
-                                                                       &service_sampler,
-                                                                       &timeout_sampler, &mut rng);
+                        let arrival_ts = sys.time + think_sampler.ind_sample(&mut rng);
+                        let total_service = service_sampler.ind_sample(&mut rng);
+                        let timeout = timeout_sampler.ind_sample(&mut rng);
+                        let (arrival_e, timeout_e) = Event::new_arrival(arrival_ts, total_service, timeout);
                         events.push(arrival_e);
                         events.push(timeout_e);
                     }
@@ -158,7 +144,7 @@ fn main() {
                 }
             },
             QuantumOver(rc_cpu) => {
-                println!("T={} QuantumOver({:?})", sys.time, &rc_cpu);
+                //println!("T={} QuantumOver({:?})", sys.time, &rc_cpu);
                 {
                     let mut cpu = rc_cpu.borrow_mut();
                     let procd_time = sys.time - cpu.quantum_start;
@@ -176,10 +162,10 @@ fn main() {
                 Some(rc_req) => {
                     println!("T={} Timeout({:?})", sys.time, &rc_req);
                     sys.n_req_timeo += 1;
-                    let (arrival_e, timeout_e) = sched_new_arrival(sys.time,
-                                                                   &retry_think_sampler,
-                                                                   &service_sampler,
-                                                                   &timeout_sampler, &mut rng);
+                    let arrival_ts = sys.time + retry_think_sampler.ind_sample(&mut rng);
+                    let total_service = service_sampler.ind_sample(&mut rng);
+                    let timeout = timeout_sampler.ind_sample(&mut rng);
+                    let (arrival_e, timeout_e) = Event::new_arrival(arrival_ts, total_service, timeout);
                     events.push(arrival_e);
                     events.push(timeout_e);
                 },
@@ -191,5 +177,6 @@ fn main() {
             break;
         }
     }
+    println!("{:?})", sys);
 }
 

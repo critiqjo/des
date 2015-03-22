@@ -70,5 +70,17 @@ impl PartialOrd for Event {
         Some(self.cmp(other))
     }
 }
+impl Event {
+    pub fn new(_type: EventType, timestamp: f64) -> Event {
+        return Event { _type: _type, timestamp: timestamp };
+    }
+    pub fn new_arrival(arrival_ts: f64, total_service: f64, timeout: f64) -> (Event, Event) {
+        let req = Rc::new(RefCell::new(Request::new(arrival_ts, total_service)));
+
+        let arrival_e = Event::new(EventType::Arrival(req.clone()), arrival_ts);
+        let timeout_e = Event::new(EventType::Timeout(req.downgrade()), arrival_ts + timeout );
+        (arrival_e, timeout_e)
+    }
+}
 // Event }}}
 
