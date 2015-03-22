@@ -4,6 +4,7 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::BinaryHeap;
+use std::collections::VecDeque;
 
 extern crate rand;
 use rand::distributions::IndependentSample;
@@ -20,6 +21,8 @@ const N_CPU: usize = 4;
 const N_USERS: usize = 32;
 const EASE_IN_TIME: f64 = 20.0;
 const MAX_ITERS: usize = 10000;
+const BUFFER_CAPACITY: usize = 1000;
+const THREADPOOL_SIZE: usize = 40;
 const QUANTUM: f64 = 0.5;
 
 const REQ_SERVICE_TIME_MEAN: f64 = 2.0;
@@ -40,6 +43,21 @@ struct SystemMetrics {
     n_req_drops: usize,
 }
 
+fn proc_req(rc_cpu: Rc<RefCell<Cpu>>, rc_req: Rc<RefCell<Request>>, systime: f64) -> Event {
+    {
+        let mut cpu = rc_cpu.borrow_mut();
+        cpu.state = CpuState::Busy(rc_req.clone());
+        cpu.quantum_start = systime;
+    }
+    let quantum = QUANTUM; // randomized?
+    let rem_serv = rc_req.borrow().remaining_service;
+    if rem_serv < quantum {
+        Event { _type: EventType::Departure(rc_cpu.clone()), timestamp: systime + rem_serv }
+    } else {
+        Event { _type: EventType::QuantumOver(rc_cpu.clone()), timestamp: systime + quantum }
+    }
+}
+
 fn main() {
     let mut sys = SystemMetrics { time: 0.0, sum_resp_time: 0.0, n_req_proc: 0, n_req_timeo: 0, n_req_drops: 0 };
     let mut events = BinaryHeap::new();
@@ -48,6 +66,8 @@ fn main() {
     for _ in 0..N_CPU {
         idle_cpus.push(Rc::new(RefCell::new(Cpu::new())));
     }
+    let mut rbuff = VecDeque::with_capacity(BUFFER_CAPACITY);
+    let mut tpool = VecDeque::with_capacity(THREADPOOL_SIZE);
     let ease_in = Range::new(0.0_f64, EASE_IN_TIME);
     let service = Exp::new(1.0/REQ_SERVICE_TIME_MEAN);
     let timeout = Range::new(REQ_TIMEOUT_MIN, REQ_TIMEOUT_MAX);
@@ -68,6 +88,16 @@ fn main() {
         match e._type {
             Arrival(rc_req) => {
                 println!("T={} Arrival({:?})", sys.time, &rc_req);
+                if let Some(rc_cpu) = idle_cpus.pop() {
+                    events.push(proc_req(rc_cpu, rc_req, sys.time));
+                } else if (tpool.len() < THREADPOOL_SIZE) {
+                    tpool.push_back(rc_req);
+                } else if (rbuff.len() < BUFFER_CAPACITY) {
+                    rbuff.push_back(rc_req);
+                } else {
+                    sys.n_req_drops += 1;
+                    // TODO client retries here
+                }
             },
             Departure(rc_cpu) => {
                 println!("T={} Departure({:?})", sys.time, &rc_cpu);
