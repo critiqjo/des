@@ -8,6 +8,7 @@ use std::collections::BinaryHeap;
 use std::collections::VecDeque;
 
 extern crate rand;
+use rand::ThreadRng;
 use rand::distributions::IndependentSample;
 use rand::distributions::{Exp, Normal, Range};
 
@@ -59,6 +60,23 @@ fn event_after_proc(rc_req: Rc<RefCell<Request>>, rc_cpu: Rc<RefCell<Cpu>>, syst
     }
 }
 
+fn sched_new_arrival<A: IndependentSample<f64>,
+                     S: IndependentSample<f64>,
+                     T: IndependentSample<f64>>
+                    (time: f64, arrival_sampler: &A,
+                                service_sampler: &S,
+                                timeout_sampler: &T,
+                                rng: &mut ThreadRng) -> (Event, Event) {
+    let req = Rc::new(RefCell::new(Request::new(time, arrival_sampler, service_sampler, rng)));
+
+    let arrival_ts = req.borrow().arrival_time;
+    let arrival_e = Event { _type: EventType::Arrival(req.clone()), timestamp: arrival_ts };
+
+    let timeout_ts = arrival_ts + timeout_sampler.ind_sample(rng);
+    let timeout_e = Event { _type: EventType::Timeout(req.clone().downgrade()), timestamp: timeout_ts };
+    (arrival_e, timeout_e)
+}
+
 fn main() {
     let mut sys = SystemMetrics { time: 0.0, sum_resp_time: 0.0,
                                   n_req_proc: 0, n_req_timeo: 0, n_req_drops: 0 };
@@ -74,17 +92,15 @@ fn main() {
     let service_sampler = Exp::new(1.0/REQ_SERVICE_TIME_MEAN);
     let timeout_sampler = Range::new(REQ_TIMEOUT_MIN, REQ_TIMEOUT_MAX);
     let think_sampler = Normal::new(THINK_TIME_MEAN, THINK_TIME_STD_DEV);
+    let retry_think_sampler = Normal::new(RETRY_THINK_TIME_MEAN, RETRY_THINK_TIME_STD_DEV);
 
     for _ in 0..N_USERS {
-        let req = Rc::new(RefCell::new(Request::new(sys.time, &ease_in_sampler, &service_sampler, &mut rng)));
-
-        let arrival = req.borrow().arrival_time;
-        let e = Event { _type: EventType::Arrival(req.clone()), timestamp: arrival };
-        events.push(e);
-
-        let timeout = arrival + timeout_sampler.ind_sample(&mut rng);
-        let e = Event { _type: EventType::Timeout(req.clone().downgrade()), timestamp: timeout };
-        events.push(e);
+        let (arrival_e, timeout_e) = sched_new_arrival(sys.time,
+                                                       &ease_in_sampler,
+                                                       &service_sampler,
+                                                       &timeout_sampler, &mut rng);
+        events.push(arrival_e);
+        events.push(timeout_e);
     }
 
     let mut iters = 0;
@@ -114,15 +130,12 @@ fn main() {
                         CpuState::Idle => panic!("At the time of departure, CPU should not be IDLE."),
                     };
                     if (weak_count(&rc_req) != 0) { // Was not timed out
-                        let req = Rc::new(RefCell::new(Request::new(sys.time, &think_sampler, &service_sampler, &mut rng)));
-
-                        let arrival = req.borrow().arrival_time;
-                        let e = Event { _type: EventType::Arrival(req.clone()), timestamp: arrival };
-                        events.push(e);
-
-                        let timeout = arrival + timeout_sampler.ind_sample(&mut rng);
-                        let e = Event { _type: EventType::Timeout(req.clone().downgrade()), timestamp: timeout };
-                        events.push(e);
+                        let (arrival_e, timeout_e) = sched_new_arrival(sys.time,
+                                                                       &think_sampler,
+                                                                       &service_sampler,
+                                                                       &timeout_sampler, &mut rng);
+                        events.push(arrival_e);
+                        events.push(timeout_e);
                     }
                     cpu.total_busy_time += (sys.time - cpu.quantum_start);
                     sys.sum_resp_time += sys.time - rc_req.borrow().arrival_time;
