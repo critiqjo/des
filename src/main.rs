@@ -130,11 +130,11 @@ fn main() {
                 println!("T={} Departure({:?})", sys.time, &rc_cpu);
                 {
                     let mut cpu = rc_cpu.borrow_mut();
-                    let rc_req = match (cpu.state) {
+                    let rc_req = match cpu.state {
                         CpuState::Busy(ref rc_req) => rc_req.clone(),
                         CpuState::Idle => panic!("At the time of departure, CPU should not be IDLE."),
                     };
-                    if (weak_count(&rc_req) != 0) { // Was not timed out
+                    if weak_count(&rc_req) != 0 { // Was not timed out
                         let (arrival_e, timeout_e) = sched_new_arrival(sys.time,
                                                                        &think_sampler,
                                                                        &service_sampler,
@@ -142,14 +142,14 @@ fn main() {
                         events.push(arrival_e);
                         events.push(timeout_e);
                     }
-                    cpu.total_busy_time += (sys.time - cpu.quantum_start);
+                    cpu.total_busy_time += sys.time - cpu.quantum_start;
                     sys.sum_resp_time += sys.time - rc_req.borrow().arrival_time;
                     sys.n_req_proc += 1;
                 }
 
                 if let Some(req) = tpool.pop_front() {
                     events.push(event_after_proc(req, rc_cpu, sys.time));
-                    if(rbuff.len() > 0) {
+                    if rbuff.len() > 0 {
                         tpool.push_back(rbuff.pop_front().unwrap());
                     }
                 } else {
