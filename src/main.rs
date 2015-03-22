@@ -2,6 +2,7 @@
 // suppress warning when using Weak, downgrade, strong_count
 
 use std::rc::Rc;
+use std::rc::weak_count;
 use std::cell::RefCell;
 use std::collections::BinaryHeap;
 use std::collections::VecDeque;
@@ -72,6 +73,7 @@ fn main() {
     let ease_in_sampler = Range::new(0.0_f64, EASE_IN_TIME);
     let service_sampler = Exp::new(1.0/REQ_SERVICE_TIME_MEAN);
     let timeout_sampler = Range::new(REQ_TIMEOUT_MIN, REQ_TIMEOUT_MAX);
+    let think_sampler = Normal::new(THINK_TIME_MEAN, THINK_TIME_STD_DEV);
 
     for _ in 0..N_USERS {
         let req = Rc::new(RefCell::new(Request::new(sys.time, &ease_in_sampler, &service_sampler, &mut rng)));
@@ -105,6 +107,37 @@ fn main() {
             },
             Departure(rc_cpu) => {
                 println!("T={} Departure({:?})", sys.time, &rc_cpu);
+                {
+                    let mut cpu = rc_cpu.borrow_mut();
+                    let rc_req = match (cpu.state) {
+                        CpuState::Busy(ref rc_req) => rc_req.clone(),
+                        CpuState::Idle => panic!("At the time of departure, CPU should not be IDLE."),
+                    };
+                    if (weak_count(&rc_req) != 0) { // Was not timed out
+                        let req = Rc::new(RefCell::new(Request::new(sys.time, &think_sampler, &service_sampler, &mut rng)));
+
+                        let arrival = req.borrow().arrival_time;
+                        let e = Event { _type: EventType::Arrival(req.clone()), timestamp: arrival };
+                        events.push(e);
+
+                        let timeout = arrival + timeout_sampler.ind_sample(&mut rng);
+                        let e = Event { _type: EventType::Timeout(req.clone().downgrade()), timestamp: timeout };
+                        events.push(e);
+                    }
+                    cpu.total_busy_time += (sys.time - cpu.quantum_start);
+                    sys.sum_resp_time += sys.time - rc_req.borrow().arrival_time;
+                    sys.n_req_proc += 1;
+                }
+
+                if let Some(req) = tpool.pop_front() {
+                    events.push(event_after_proc(req, rc_cpu, sys.time));
+                    if(rbuff.len() > 0) {
+                        tpool.push_back(rbuff.pop_front().unwrap());
+                    }
+                } else {
+                    rc_cpu.borrow_mut().state = CpuState::Idle;
+                    idle_cpus.push(rc_cpu);
+                }
             },
             QuantumOver(rc_cpu) => {
                 println!("T={} QuantumOver({:?})", sys.time, &rc_cpu);
@@ -127,7 +160,7 @@ fn main() {
                     sys.n_req_timeo += 1;
                     // TODO client retries here
                 },
-                None => println!("T={} Timeout(None)", sys.time),
+                None => {}
             },
         }
         iters += 1;
