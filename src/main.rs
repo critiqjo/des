@@ -19,10 +19,17 @@ use request::Request;
 const N_CPU: usize = 4;
 const N_USERS: usize = 32;
 const EASE_IN_TIME: f64 = 20.0;
+const MAX_ITERS: usize = 10000;
+const QUANTUM: f64 = 0.5;
 
 const REQ_SERVICE_TIME_MEAN: f64 = 2.0;
 const REQ_TIMEOUT_MIN: f64 = 10.0;
 const REQ_TIMEOUT_MAX: f64 = 30.0;
+
+const THINK_TIME_MEAN: f64 = 24.0;
+const THINK_TIME_STD_DEV: f64 = 8.0;
+const RETRY_THINK_TIME_MEAN: f64 = 2.0;
+const RETRY_THINK_TIME_STD_DEV: f64 = 1.0;
 
 #[derive(Debug)]
 struct SystemMetrics {
@@ -55,8 +62,29 @@ fn main() {
         events.push(e);
     }
 
+    let mut iters = 0;
     while let Some(e) = events.pop() {
-        println!("{:?}", &e);
+        use event::EventType::*;
+        sys.time = e.timestamp;
+        match e._type {
+            Arrival(rc_req) => {
+                println!("T={} Arrival({:?})", sys.time, &rc_req);
+            },
+            Departure(rc_cpu) => {
+                println!("T={} Departure({:?})", sys.time, &rc_cpu);
+            },
+            QuantumOver(rc_cpu) => {
+                println!("T={} QuantumOver({:?})", sys.time, &rc_cpu);
+            },
+            Timeout(weak_req) => match weak_req.upgrade() {
+                Some(rc_req) => println!("T={} Timeout({:?})", sys.time, &rc_req),
+                None => println!("T={} Timeout(None)", sys.time),
+            },
+        }
+        iters += 1;
+        if iters >= MAX_ITERS {
+            break;
+        }
     }
 }
 
