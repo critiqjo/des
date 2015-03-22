@@ -104,6 +104,18 @@ fn main() {
             },
             QuantumOver(rc_cpu) => {
                 println!("T={} QuantumOver({:?})", sys.time, &rc_cpu);
+                {
+                    let mut cpu = rc_cpu.borrow_mut();
+                    let procd_time = sys.time - cpu.quantum_start;
+                    cpu.total_busy_time += procd_time;
+                    if let CpuState::Busy( ref rc_req ) = cpu.state {
+                        rc_req.borrow_mut().remaining_service -= procd_time;
+                        tpool.push_back(rc_req.clone());
+                    } else {
+                        panic!("Cpu should have been busy!");
+                    }
+                }
+                events.push(proc_req(rc_cpu, tpool.pop_front().unwrap(), sys.time));
             },
             Timeout(weak_req) => match weak_req.upgrade() {
                 Some(rc_req) => println!("T={} Timeout({:?})", sys.time, &rc_req),
