@@ -43,7 +43,7 @@ struct SystemMetrics {
     n_req_drops: usize,
 }
 
-fn proc_req(rc_cpu: Rc<RefCell<Cpu>>, rc_req: Rc<RefCell<Request>>, systime: f64) -> Event {
+fn event_after_proc(rc_req: Rc<RefCell<Request>>, rc_cpu: Rc<RefCell<Cpu>>, systime: f64) -> Event {
     {
         let mut cpu = rc_cpu.borrow_mut();
         cpu.state = CpuState::Busy(rc_req.clone());
@@ -59,7 +59,8 @@ fn proc_req(rc_cpu: Rc<RefCell<Cpu>>, rc_req: Rc<RefCell<Request>>, systime: f64
 }
 
 fn main() {
-    let mut sys = SystemMetrics { time: 0.0, sum_resp_time: 0.0, n_req_proc: 0, n_req_timeo: 0, n_req_drops: 0 };
+    let mut sys = SystemMetrics { time: 0.0, sum_resp_time: 0.0,
+                                  n_req_proc: 0, n_req_timeo: 0, n_req_drops: 0 };
     let mut events = BinaryHeap::new();
     let mut rng = rand::thread_rng();
     let mut idle_cpus = Vec::with_capacity(N_CPU);
@@ -68,16 +69,19 @@ fn main() {
     }
     let mut rbuff = VecDeque::with_capacity(BUFFER_CAPACITY);
     let mut tpool = VecDeque::with_capacity(THREADPOOL_SIZE);
-    let ease_in = Range::new(0.0_f64, EASE_IN_TIME);
-    let service = Exp::new(1.0/REQ_SERVICE_TIME_MEAN);
-    let timeout = Range::new(REQ_TIMEOUT_MIN, REQ_TIMEOUT_MAX);
+    let ease_in_sampler = Range::new(0.0_f64, EASE_IN_TIME);
+    let service_sampler = Exp::new(1.0/REQ_SERVICE_TIME_MEAN);
+    let timeout_sampler = Range::new(REQ_TIMEOUT_MIN, REQ_TIMEOUT_MAX);
 
     for _ in 0..N_USERS {
-        let req = Rc::new(RefCell::new(Request::new(sys.time, &ease_in, &service, &mut rng)));
+        let req = Rc::new(RefCell::new(Request::new(sys.time, &ease_in_sampler, &service_sampler, &mut rng)));
+
         let arrival = req.borrow().arrival_time;
         let e = Event { _type: EventType::Arrival(req.clone()), timestamp: arrival };
         events.push(e);
-        let e = Event { _type: EventType::Timeout(req.clone().downgrade()), timestamp: arrival + timeout.ind_sample(&mut rng) };
+
+        let timeout = arrival + timeout_sampler.ind_sample(&mut rng);
+        let e = Event { _type: EventType::Timeout(req.clone().downgrade()), timestamp: timeout };
         events.push(e);
     }
 
@@ -89,7 +93,7 @@ fn main() {
             Arrival(rc_req) => {
                 println!("T={} Arrival({:?})", sys.time, &rc_req);
                 if let Some(rc_cpu) = idle_cpus.pop() {
-                    events.push(proc_req(rc_cpu, rc_req, sys.time));
+                    events.push(event_after_proc(rc_req, rc_cpu, sys.time));
                 } else if (tpool.len() + N_CPU < THREADPOOL_SIZE) {
                     tpool.push_back(rc_req);
                 } else if (rbuff.len() < BUFFER_CAPACITY) {
@@ -115,10 +119,14 @@ fn main() {
                         panic!("Cpu should have been busy!");
                     }
                 }
-                events.push(proc_req(rc_cpu, tpool.pop_front().unwrap(), sys.time));
+                events.push(event_after_proc(tpool.pop_front().unwrap(), rc_cpu, sys.time));
             },
             Timeout(weak_req) => match weak_req.upgrade() {
-                Some(rc_req) => println!("T={} Timeout({:?})", sys.time, &rc_req),
+                Some(rc_req) => {
+                    println!("T={} Timeout({:?})", sys.time, &rc_req);
+                    sys.n_req_timeo += 1;
+                    // TODO client retries here
+                },
                 None => println!("T={} Timeout(None)", sys.time),
             },
         }
