@@ -44,11 +44,10 @@ fn main() {
     let mut sys = SystemMetrics { time: 0.0, sum_resp_time: 0.0, n_req_proc: 0, n_req_timeo: 0, n_req_drops: 0 };
     let mut events = BinaryHeap::new();
     let mut rng = rand::thread_rng();
-    let mut cpus = Vec::with_capacity(N_CPU);
-    for _ in 0..N_CPU-1 {
-        cpus.push(Rc::new(RefCell::new(Cpu::new())));
+    let mut idle_cpus = Vec::with_capacity(N_CPU);
+    for _ in 0..N_CPU {
+        idle_cpus.push(Rc::new(RefCell::new(Cpu::new())));
     }
-    let cpus = cpus; //remove mutability
     let ease_in = Range::new(0.0_f64, EASE_IN_TIME);
     let service = Exp::new(1.0/REQ_SERVICE_TIME_MEAN);
     let timeout = Range::new(REQ_TIMEOUT_MIN, REQ_TIMEOUT_MAX);
