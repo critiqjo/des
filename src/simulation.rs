@@ -1,86 +1,82 @@
-#![feature(alloc)]
-// suppress warning when using Weak, downgrade, weak_count
-
 use std::rc::Rc;
 use std::rc::weak_count;
 use std::cell::RefCell;
 use std::collections::BinaryHeap;
 use std::collections::VecDeque;
 
-extern crate rand;
+use rand::thread_rng;
 use rand::distributions::IndependentSample;
 use rand::distributions::{Exp, Normal, Range};
 
-mod cpu;
-mod event;
-mod request;
 use cpu::{Cpu, CpuState};
 use event::{Event, EventType};
 use request::Request;
 
-const N_CPU: usize = 4;
-const N_USERS: usize = 32;
-const EASE_IN_TIME: f64 = 20.0;
-const MAX_ITERS: usize = 10000;
-const BUFFER_CAPACITY: usize = 1000;
-const THREADPOOL_SIZE: usize = 40;
-const QUANTUM: f64 = 0.5;
+pub struct SystemParams {
+    pub n_cpu: usize,
+    pub n_users: usize,
+    pub ease_in_time: f64,
+    pub max_iters: usize,
+    pub buffer_capacity: usize,
+    pub threadpool_size: usize,
+    pub quantum: f64,
 
-const REQ_SERVICE_TIME_MEAN: f64 = 2.0;
-const REQ_TIMEOUT_MIN: f64 = 10.0;
-const REQ_TIMEOUT_MAX: f64 = 30.0;
+    pub req_service_time_mean: f64,
+    pub req_timeout_min: f64,
+    pub req_timeout_max: f64,
 
-const THINK_TIME_MEAN: f64 = 24.0;
-const THINK_TIME_STD_DEV: f64 = 8.0;
-const RETRY_THINK_TIME_MEAN: f64 = 2.0;
-const RETRY_THINK_TIME_STD_DEV: f64 = 1.0;
-
-#[derive(Debug)]
-struct SystemMetrics {
-    time: f64,
-    sum_resp_time: f64,
-    n_req_proc: usize,
-    n_req_timeo: usize,
-    n_req_drops: usize,
+    pub think_time_mean: f64,
+    pub think_time_std_dev: f64,
+    pub retry_think_time_mean: f64,
+    pub retry_think_time_std_dev: f64,
 }
 
-fn event_after_proc(rc_req: Rc<RefCell<Request>>, rc_cpu: Rc<RefCell<Cpu>>, systime: f64) -> Event {
+#[derive(Debug)]
+pub struct SystemMetrics {
+    pub time: f64,
+    pub sum_resp_time: f64,
+    pub n_req_proc: usize,
+    pub n_req_timeo: usize,
+    pub n_req_drops: usize,
+    pub total_cpu_time: f64,
+}
+
+fn event_after_proc(rc_req: Rc<RefCell<Request>>, rc_cpu: Rc<RefCell<Cpu>>, simtime: f64, quantum: f64) -> Event {
     {
         let mut cpu = rc_cpu.borrow_mut();
         cpu.state = CpuState::Busy(rc_req.clone());
-        cpu.quantum_start = systime;
+        cpu.quantum_start = simtime;
     }
-    let quantum = QUANTUM; // randomized?
     let rem_serv = rc_req.borrow().remaining_service;
     if rem_serv < quantum {
-        Event::new(EventType::Departure(rc_cpu.clone()), systime + rem_serv)
+        Event::new(EventType::Departure(rc_cpu.clone()), simtime + rem_serv)
     } else {
-        Event::new(EventType::QuantumOver(rc_cpu.clone()), systime + quantum)
+        Event::new(EventType::QuantumOver(rc_cpu.clone()), simtime + quantum)
     }
 }
 
-fn main() {
-    let mut sys = SystemMetrics { time: 0.0, sum_resp_time: 0.0,
-                                  n_req_proc: 0, n_req_timeo: 0, n_req_drops: 0 };
+pub fn run(sys: &SystemParams) -> SystemMetrics {
+    let mut sim = SystemMetrics { time: 0.0, sum_resp_time: 0.0, n_req_proc: 0,
+                                  n_req_timeo: 0, n_req_drops: 0, total_cpu_time: 0.0 };
     let mut events = BinaryHeap::new();
-    let mut rng = rand::thread_rng();
-    let mut cpus = Vec::with_capacity(N_CPU);
-    let mut idle_cpus = Vec::with_capacity(N_CPU);
-    for _ in 0..N_CPU {
+    let mut rng = thread_rng();
+    let mut cpus = Vec::with_capacity(sys.n_cpu);
+    let mut idle_cpus = Vec::with_capacity(sys.n_cpu);
+    for _ in 0..sys.n_cpu {
         let cpu = Rc::new(RefCell::new(Cpu::new()));
         idle_cpus.push(cpu.clone());
         cpus.push(cpu);
     }
-    let mut rbuff = VecDeque::with_capacity(BUFFER_CAPACITY); // Request Buffer
-    let mut tpool = VecDeque::with_capacity(THREADPOOL_SIZE); // Thread Pool
-    let ease_in_sampler = Range::new(0.0_f64, EASE_IN_TIME);
-    let service_sampler = Exp::new(1.0/REQ_SERVICE_TIME_MEAN);
-    let timeout_sampler = Range::new(REQ_TIMEOUT_MIN, REQ_TIMEOUT_MAX);
-    let think_sampler = Normal::new(THINK_TIME_MEAN, THINK_TIME_STD_DEV);
-    let retry_think_sampler = Normal::new(RETRY_THINK_TIME_MEAN, RETRY_THINK_TIME_STD_DEV);
+    let mut rbuff = VecDeque::with_capacity(sys.buffer_capacity); // Request Buffer
+    let mut tpool = VecDeque::with_capacity(sys.threadpool_size); // Thread Pool
+    let ease_in_sampler = Range::new(0.0_f64, sys.ease_in_time);
+    let service_sampler = Exp::new(1.0/sys.req_service_time_mean);
+    let timeout_sampler = Range::new(sys.req_timeout_min, sys.req_timeout_max);
+    let think_sampler = Normal::new(sys.think_time_mean, sys.think_time_std_dev);
+    let retry_think_sampler = Normal::new(sys.retry_think_time_mean, sys.retry_think_time_std_dev);
 
-    for _ in 0..N_USERS {
-        let arrival_ts = sys.time + ease_in_sampler.ind_sample(&mut rng);
+    for _ in 0..sys.n_users {
+        let arrival_ts = sim.time + ease_in_sampler.ind_sample(&mut rng);
         let total_service = service_sampler.ind_sample(&mut rng);
         let timeout = timeout_sampler.ind_sample(&mut rng);
         let (arrival_e, timeout_e) = Event::new_arrival(arrival_ts, total_service, timeout);
@@ -91,22 +87,22 @@ fn main() {
     let mut iters = 0;
     while let Some(e) = events.pop() {
         use event::EventType::*;
-        sys.time = e.timestamp;
+        sim.time = e.timestamp;
         match e._type {
             Arrival(rc_req) => {
-                //println!("T={} Arrival({:?})", sys.time, &rc_req);
+                //println!("T={} Arrival({:?})", sim.time, &rc_req);
                 if let Some(rc_cpu) = idle_cpus.pop() {
-                    events.push(event_after_proc(rc_req, rc_cpu, sys.time));
-                } else if (tpool.len() + N_CPU < THREADPOOL_SIZE) {
+                    events.push(event_after_proc(rc_req, rc_cpu, sim.time, sys.quantum));
+                } else if (tpool.len() + sys.n_cpu < sys.threadpool_size) {
                     tpool.push_back(rc_req);
-                } else if (rbuff.len() < BUFFER_CAPACITY) {
+                } else if (rbuff.len() < sys.buffer_capacity) {
                     rbuff.push_back(rc_req);
                 } else {
-                    sys.n_req_drops += 1;
+                    sim.n_req_drops += 1;
                     // The client cannot know the request was dropped right away.
                     // Therefore waits for a timeout, and then a retry think time,
                     // before issuing a new request.
-                    let arrival_ts = sys.time + timeout_sampler.ind_sample(&mut rng) +
+                    let arrival_ts = sim.time + timeout_sampler.ind_sample(&mut rng) +
                                                 retry_think_sampler.ind_sample(&mut rng);
                     let total_service = service_sampler.ind_sample(&mut rng);
                     let timeout = timeout_sampler.ind_sample(&mut rng);
@@ -116,28 +112,28 @@ fn main() {
                 }
             },
             Departure(rc_cpu) => {
-                //println!("T={} Departure({:?})", sys.time, &rc_cpu);
+                //println!("T={} Departure({:?})", sim.time, &rc_cpu);
                 {
                     let mut cpu = rc_cpu.borrow_mut();
                     let rc_req = match cpu.state {
                         CpuState::Busy(ref rc_req) => rc_req.clone(),
                         CpuState::Idle => panic!("At the time of departure, CPU should not be IDLE."),
                     };
-                    if weak_count(&rc_req) != 0 { // Was not timed out
-                        let arrival_ts = sys.time + think_sampler.ind_sample(&mut rng);
+                    if weak_count(&rc_req) > 0 { // Request was not timed out
+                        let arrival_ts = sim.time + think_sampler.ind_sample(&mut rng);
                         let total_service = service_sampler.ind_sample(&mut rng);
                         let timeout = timeout_sampler.ind_sample(&mut rng);
                         let (arrival_e, timeout_e) = Event::new_arrival(arrival_ts, total_service, timeout);
                         events.push(arrival_e);
                         events.push(timeout_e);
                     }
-                    cpu.total_busy_time += sys.time - cpu.quantum_start;
-                    sys.sum_resp_time += sys.time - rc_req.borrow().arrival_time;
-                    sys.n_req_proc += 1;
+                    cpu.total_busy_time += sim.time - cpu.quantum_start;
+                    sim.sum_resp_time += sim.time - rc_req.borrow().arrival_time;
+                    sim.n_req_proc += 1;
                 }
 
                 if let Some(req) = tpool.pop_front() {
-                    events.push(event_after_proc(req, rc_cpu, sys.time));
+                    events.push(event_after_proc(req, rc_cpu, sim.time, sys.quantum));
                     if rbuff.len() > 0 {
                         tpool.push_back(rbuff.pop_front().unwrap());
                     }
@@ -147,10 +143,10 @@ fn main() {
                 }
             },
             QuantumOver(rc_cpu) => {
-                //println!("T={} QuantumOver({:?})", sys.time, &rc_cpu);
+                //println!("T={} QuantumOver({:?})", sim.time, &rc_cpu);
                 {
                     let mut cpu = rc_cpu.borrow_mut();
-                    let procd_time = sys.time - cpu.quantum_start;
+                    let procd_time = sim.time - cpu.quantum_start;
                     cpu.total_busy_time += procd_time;
                     if let CpuState::Busy( ref rc_req ) = cpu.state {
                         rc_req.borrow_mut().remaining_service -= procd_time;
@@ -159,13 +155,13 @@ fn main() {
                         panic!("Cpu should have been busy!");
                     }
                 }
-                events.push(event_after_proc(tpool.pop_front().unwrap(), rc_cpu, sys.time));
+                events.push(event_after_proc(tpool.pop_front().unwrap(), rc_cpu, sim.time, sys.quantum));
             },
             Timeout(weak_req) => match weak_req.upgrade() {
                 Some(rc_req) => {
-                    println!("T={} Timedout! {:?}", sys.time, rc_req.borrow());
-                    sys.n_req_timeo += 1;
-                    let arrival_ts = sys.time + retry_think_sampler.ind_sample(&mut rng);
+                    println!("T={} Timedout! {:?}", sim.time, rc_req.borrow());
+                    sim.n_req_timeo += 1;
+                    let arrival_ts = sim.time + retry_think_sampler.ind_sample(&mut rng);
                     let total_service = service_sampler.ind_sample(&mut rng);
                     let timeout = timeout_sampler.ind_sample(&mut rng);
                     let (arrival_e, timeout_e) = Event::new_arrival(arrival_ts, total_service, timeout);
@@ -176,28 +172,14 @@ fn main() {
             },
         }
         iters += 1;
-        if iters >= MAX_ITERS {
+        if iters >= sys.max_iters {
             break;
         }
     }
-    println!("\n{:?})", sys);
-
-    let avg_resp_time = sys.sum_resp_time/sys.n_req_proc as f64;
-    let total_cpu_time = cpus.into_iter().fold(0.0, |sum, cpu_rc| {
+    sim.total_cpu_time = cpus.into_iter().fold(0.0, |sum, cpu_rc| {
         let cpu = cpu_rc.borrow();
         sum + cpu.total_busy_time
     });
-    let avg_cpu_util = total_cpu_time / sys.time / N_CPU as f64;
-    let avg_service_time = total_cpu_time / sys.n_req_proc as f64;
-    let tput = sys.n_req_proc as f64/sys.time;
-    let utput = (sys.n_req_proc - sys.n_req_timeo) as f64/sys.time;
-    let ffrac = (sys.n_req_drops + sys.n_req_timeo) as f64/(sys.n_req_proc + sys.n_req_drops) as f64;
-    println!("
-  Avg response time = {}
-  Avg CPU utilization = {}
-  Avg throughput = {}
-  Avg useful throughput = {}
-  Fraction of failed requests = {}
-  Avg service time = {}\n", avg_resp_time, avg_cpu_util, tput, utput, ffrac, avg_service_time);
+    sim
 }
 
