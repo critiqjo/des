@@ -1,5 +1,5 @@
 #![feature(alloc)]
-// suppress warning when using Weak, downgrade, strong_count
+// suppress warning when using Weak, downgrade, weak_count
 
 use std::rc::Rc;
 use std::rc::weak_count;
@@ -64,12 +64,15 @@ fn main() {
                                   n_req_proc: 0, n_req_timeo: 0, n_req_drops: 0 };
     let mut events = BinaryHeap::new();
     let mut rng = rand::thread_rng();
+    let mut cpus = Vec::with_capacity(N_CPU);
     let mut idle_cpus = Vec::with_capacity(N_CPU);
     for _ in 0..N_CPU {
-        idle_cpus.push(Rc::new(RefCell::new(Cpu::new())));
+        let cpu = Rc::new(RefCell::new(Cpu::new()));
+        idle_cpus.push(cpu.clone());
+        cpus.push(cpu);
     }
-    let mut rbuff = VecDeque::with_capacity(BUFFER_CAPACITY);
-    let mut tpool = VecDeque::with_capacity(THREADPOOL_SIZE);
+    let mut rbuff = VecDeque::with_capacity(BUFFER_CAPACITY); // Request Buffer
+    let mut tpool = VecDeque::with_capacity(THREADPOOL_SIZE); // Thread Pool
     let ease_in_sampler = Range::new(0.0_f64, EASE_IN_TIME);
     let service_sampler = Exp::new(1.0/REQ_SERVICE_TIME_MEAN);
     let timeout_sampler = Range::new(REQ_TIMEOUT_MIN, REQ_TIMEOUT_MAX);
@@ -160,7 +163,7 @@ fn main() {
             },
             Timeout(weak_req) => match weak_req.upgrade() {
                 Some(rc_req) => {
-                    println!("T={} Timeout({:?})", sys.time, &rc_req);
+                    println!("T={} Timedout! {:?}", sys.time, rc_req.borrow());
                     sys.n_req_timeo += 1;
                     let arrival_ts = sys.time + retry_think_sampler.ind_sample(&mut rng);
                     let total_service = service_sampler.ind_sample(&mut rng);
@@ -177,6 +180,24 @@ fn main() {
             break;
         }
     }
-    println!("{:?})", sys);
+    println!("\n{:?})", sys);
+
+    let avg_resp_time = sys.sum_resp_time/sys.n_req_proc as f64;
+    let total_cpu_time = cpus.into_iter().fold(0.0, |sum, cpu_rc| {
+        let cpu = cpu_rc.borrow();
+        sum + cpu.total_busy_time
+    });
+    let avg_cpu_util = total_cpu_time / sys.time / N_CPU as f64;
+    let avg_service_time = total_cpu_time / sys.n_req_proc as f64;
+    let tput = sys.n_req_proc as f64/sys.time;
+    let utput = (sys.n_req_proc - sys.n_req_timeo) as f64/sys.time;
+    let ffrac = (sys.n_req_drops + sys.n_req_timeo) as f64/(sys.n_req_proc + sys.n_req_drops) as f64;
+    println!("
+  Avg response time = {}
+  Avg CPU utilization = {}
+  Avg throughput = {}
+  Avg useful throughput = {}
+  Fraction of failed requests = {}
+  Avg service time = {}\n", avg_resp_time, avg_cpu_util, tput, utput, ffrac, avg_service_time);
 }
 
