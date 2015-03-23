@@ -12,6 +12,7 @@ use cpu::{Cpu, CpuState};
 use event::{Event, EventType};
 use request::Request;
 
+#[derive(RustcDecodable, RustcEncodable)]
 pub struct SystemParams {
     pub n_cpu: usize,
     pub n_users: usize,

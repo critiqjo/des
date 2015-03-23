@@ -7,25 +7,19 @@ mod request;
 mod simulation;
 
 extern crate rand;
+extern crate "rustc-serialize" as rustc_serialize;
+
+use std::io::{self, Read};
+use std::borrow::Borrow;
+use rustc_serialize::json;
 
 fn main() {
-    let sys = simulation::SystemParams {
-        n_cpu: 4,
-        n_users: 32,
-        ease_in_time: 20.0,
-        max_iters: 50000,
-        buffer_capacity: 1000,
-        threadpool_size: 40,
-        quantum: 0.5,
-
-        req_service_time_mean: 2.0,
-        req_timeout_min: 10.0,
-        req_timeout_max: 30.0,
-
-        think_time_mean: 24.0,
-        think_time_std_dev: 8.0,
-        retry_think_time_mean: 2.0,
-        retry_think_time_std_dev: 1.0,
+    let mut stdin = io::stdin();
+    let mut sys_json = String::new();
+    let sys: simulation::SystemParams;
+    sys = match stdin.read_to_string(&mut sys_json) {
+        Ok(_) => json::decode(sys_json.borrow()).unwrap(),
+        Err(e) => panic!("Fatal error: {:?}", e),
     };
     let sim = simulation::run(&sys);
     let avg_resp_time = sim.sum_resp_time/sim.n_req_proc as f64;
