@@ -35,6 +35,7 @@ pub struct SystemParams {
 #[derive(Debug)]
 pub struct SystemMetrics {
     pub time: f64,
+    pub n_arrivals: usize,
     pub n_processed: usize, // incl. timed-out
     pub n_timedout: usize, // incl. those in-process
     pub n_dropped: usize,
@@ -70,7 +71,7 @@ fn sample_zero_lo<T: IndependentSample<f64>>(sampler: &T, rng: &mut ThreadRng) -
 }
 
 pub fn run(sys: &SystemParams) -> SystemMetrics {
-    let mut sim = SystemMetrics { time: 0.0, n_processed: 0, n_timedout: 0,
+    let mut sim = SystemMetrics { time: 0.0, n_arrivals:0, n_processed: 0, n_timedout: 0,
                                   n_dropped: 0, n_to_in_proc: 0, sum_resp_time: 0.0,
                                   wt_sum_reqs_in_sys: 0.0, total_cpu_time: 0.0 };
     let mut reqs_in_sys = ReqsInSystem { last_mod_ts: 0.0, count: 0, to_count: 0 };
@@ -107,7 +108,7 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
         match e._type {
             Arrival(rc_req) => {
                 //println!("T={} Arrival {:?}", sim.time, rc_req.borrow());
-                //sim.n_arrivals += 1;
+                sim.n_arrivals += 1;
                 sim.wt_sum_reqs_in_sys += (sim.time - reqs_in_sys.last_mod_ts)*reqs_in_sys.count as f64;
                 reqs_in_sys.count += 1;
                 reqs_in_sys.last_mod_ts = sim.time;
