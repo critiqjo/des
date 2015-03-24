@@ -35,11 +35,17 @@ pub struct SystemParams {
 #[derive(Debug)]
 pub struct SystemMetrics {
     pub time: f64,
-    pub sum_resp_time: f64,
     pub n_req_proc: usize,
     pub n_req_timeo: usize,
     pub n_req_drops: usize,
+    pub sum_resp_time: f64,
+    pub wt_sum_reqs_in_sys: f64, // time-weighted sum of |requests in system|
     pub total_cpu_time: f64,
+}
+
+struct ReqsInSystem {
+    last_mod_ts: f64, // last modification timestamp
+    count: usize,
 }
 
 fn event_after_proc(rc_req: Rc<RefCell<Request>>, rc_cpu: Rc<RefCell<Cpu>>, simtime: f64, quantum: f64) -> Event {
@@ -62,8 +68,9 @@ fn sample_zero_lo<T: IndependentSample<f64>>(sampler: &T, rng: &mut ThreadRng) -
 }
 
 pub fn run(sys: &SystemParams) -> SystemMetrics {
-    let mut sim = SystemMetrics { time: 0.0, sum_resp_time: 0.0, n_req_proc: 0,
-                                  n_req_timeo: 0, n_req_drops: 0, total_cpu_time: 0.0 };
+    let mut sim = SystemMetrics { time: 0.0, n_req_proc: 0, n_req_timeo: 0, n_req_drops: 0,
+                                  sum_resp_time: 0.0, wt_sum_reqs_in_sys: 0.0, total_cpu_time: 0.0 };
+    let mut reqs_in_sys = ReqsInSystem { last_mod_ts: 0.0, count: 0 };
     let mut events = BinaryHeap::new();
     let mut rng = thread_rng();
     let mut cpus = Vec::with_capacity(sys.n_cpu);
@@ -97,6 +104,9 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
         match e._type {
             Arrival(rc_req) => {
                 //println!("T={} Arrival({:?})", sim.time, &rc_req);
+                sim.wt_sum_reqs_in_sys += (sim.time - reqs_in_sys.last_mod_ts)*reqs_in_sys.count as f64;
+                reqs_in_sys.count += 1;
+                reqs_in_sys.last_mod_ts = sim.time;
                 if let Some(rc_cpu) = idle_cpus.pop() {
                     events.push(event_after_proc(rc_req, rc_cpu, sim.time, sys.quantum));
                 } else if (tpool.len() + sys.n_cpu < sys.threadpool_size) {
@@ -105,6 +115,7 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
                     rbuff.push_back(rc_req);
                 } else {
                     sim.n_req_drops += 1;
+                    reqs_in_sys.count -= 1;
                     // The client cannot know the request was dropped right away.
                     // Therefore waits for a timeout, and then a retry think time,
                     // before issuing a new request.
@@ -119,6 +130,9 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
             },
             Departure(rc_cpu) => {
                 //println!("T={} Departure({:?})", sim.time, &rc_cpu);
+                sim.wt_sum_reqs_in_sys += (sim.time - reqs_in_sys.last_mod_ts)*reqs_in_sys.count as f64;
+                reqs_in_sys.count -= 1;
+                reqs_in_sys.last_mod_ts = sim.time;
                 {
                     let mut cpu = rc_cpu.borrow_mut();
                     let rc_req = match cpu.state {
