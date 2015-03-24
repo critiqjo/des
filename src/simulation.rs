@@ -38,6 +38,7 @@ pub struct SystemMetrics {
     pub n_processed: usize,
     pub n_timedout: usize,
     pub n_dropped: usize,
+    pub n_to_in_proc: usize, // timed-out but still in process
     pub sum_resp_time: f64,
     pub wt_sum_reqs_in_sys: f64, // time-weighted sum of |requests in system|
     pub total_cpu_time: f64,
@@ -46,6 +47,7 @@ pub struct SystemMetrics {
 struct ReqsInSystem {
     last_mod_ts: f64, // last modification timestamp
     count: usize,
+    to_count: usize, // timed out requests in sys
 }
 
 fn event_after_proc(rc_req: Rc<RefCell<Request>>, rc_cpu: Rc<RefCell<Cpu>>, simtime: f64, quantum: f64) -> Event {
@@ -68,9 +70,10 @@ fn sample_zero_lo<T: IndependentSample<f64>>(sampler: &T, rng: &mut ThreadRng) -
 }
 
 pub fn run(sys: &SystemParams) -> SystemMetrics {
-    let mut sim = SystemMetrics { time: 0.0, n_processed: 0, n_timedout: 0, n_dropped: 0,
-                                  sum_resp_time: 0.0, wt_sum_reqs_in_sys: 0.0, total_cpu_time: 0.0 };
-    let mut reqs_in_sys = ReqsInSystem { last_mod_ts: 0.0, count: 0 };
+    let mut sim = SystemMetrics { time: 0.0, n_processed: 0, n_timedout: 0,
+                                  n_dropped: 0, n_to_in_proc: 0, sum_resp_time: 0.0,
+                                  wt_sum_reqs_in_sys: 0.0, total_cpu_time: 0.0 };
+    let mut reqs_in_sys = ReqsInSystem { last_mod_ts: 0.0, count: 0, to_count: 0 };
     let mut events = BinaryHeap::new();
     let mut rng = thread_rng();
     let mut cpus = Vec::with_capacity(sys.n_cpu);
@@ -146,6 +149,8 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
                         let (arrival_e, timeout_e) = Event::new_arrival(arrival_ts, total_service, timeout);
                         events.push(arrival_e);
                         events.push(timeout_e);
+                    } else {
+                        reqs_in_sys.to_count -= 1;
                     }
                     cpu.total_busy_time += sim.time - cpu.quantum_start;
                     sim.sum_resp_time += sim.time - rc_req.borrow().arrival_time;
@@ -181,6 +186,7 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
                 Some(rc_req) => {
                     //println!("T={} Timedout! {:?}", sim.time, rc_req.borrow());
                     sim.n_timedout += 1;
+                    reqs_in_sys.to_count += 1;
                     let arrival_ts = sim.time + sample_zero_lo(&retry_think_sampler, &mut rng);
                     let total_service = service_sampler.ind_sample(&mut rng);
                     let timeout = timeout_sampler.ind_sample(&mut rng);
@@ -200,6 +206,7 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
         let cpu = cpu_rc.borrow();
         sum + cpu.total_busy_time
     });
+    sim.n_to_in_proc = reqs_in_sys.to_count;
     sim
 }
 

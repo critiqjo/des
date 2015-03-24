@@ -23,7 +23,8 @@ fn main() {
     };
     let sim = simulation::run(&sys);
     let tput = sim.n_processed as f64/sim.time;
-    let gput = (sim.n_processed - sim.n_timedout) as f64/sim.time;
+    let n_processed_to = sim.n_timedout - sim.n_to_in_proc;
+    let gput = (sim.n_processed - n_processed_to) as f64/sim.time;
     let avg_resp_time = sim.sum_resp_time/sim.n_processed as f64;
     let avg_cpu_util = sim.total_cpu_time / sim.time / sys.n_cpu as f64;
     let avg_service_time = sim.total_cpu_time / sim.n_processed as f64;
