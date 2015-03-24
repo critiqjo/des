@@ -22,7 +22,7 @@ pub struct SystemParams {
     pub threadpool_size: usize,
     pub quantum: f64,
 
-    pub req_service_time_mean: f64,
+    pub service_time_mean: f64,
     pub req_timeout_min: f64,
     pub req_timeout_max: f64,
 
@@ -35,8 +35,8 @@ pub struct SystemParams {
 #[derive(Debug)]
 pub struct SystemMetrics {
     pub time: f64,
-    pub n_processed: usize,
-    pub n_timedout: usize,
+    pub n_processed: usize, // incl. timed-out
+    pub n_timedout: usize, // incl. those in-process
     pub n_dropped: usize,
     pub n_to_in_proc: usize, // timed-out but still in process
     pub sum_resp_time: f64,
@@ -86,7 +86,7 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
     let mut rbuff = VecDeque::with_capacity(sys.buffer_capacity); // Request Buffer
     let mut tpool = VecDeque::with_capacity(sys.threadpool_size); // Thread Pool
     let ease_in_sampler = Range::new(0.0_f64, sys.ease_in_time);
-    let service_sampler = Exp::new(1.0/sys.req_service_time_mean);
+    let service_sampler = Exp::new(1.0/sys.service_time_mean);
     let timeout_sampler = Range::new(sys.req_timeout_min, sys.req_timeout_max);
     let think_sampler = Normal::new(sys.think_time_mean, sys.think_time_std_dev);
     let retry_think_sampler = Normal::new(sys.retry_think_time_mean, sys.retry_think_time_std_dev);
@@ -106,7 +106,8 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
         sim.time = e.timestamp;
         match e._type {
             Arrival(rc_req) => {
-                //println!("T={} Arrival({:?})", sim.time, &rc_req);
+                //println!("T={} Arrival {:?}", sim.time, rc_req.borrow());
+                //sim.n_arrivals += 1;
                 sim.wt_sum_reqs_in_sys += (sim.time - reqs_in_sys.last_mod_ts)*reqs_in_sys.count as f64;
                 reqs_in_sys.count += 1;
                 reqs_in_sys.last_mod_ts = sim.time;
@@ -132,7 +133,7 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
                 }
             },
             Departure(rc_cpu) => {
-                //println!("T={} Departure({:?})", sim.time, &rc_cpu);
+                //println!("T={} Departure {:?}", sim.time, rc_cpu.borrow());
                 sim.wt_sum_reqs_in_sys += (sim.time - reqs_in_sys.last_mod_ts)*reqs_in_sys.count as f64;
                 reqs_in_sys.count -= 1;
                 reqs_in_sys.last_mod_ts = sim.time;
@@ -168,7 +169,7 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
                 }
             },
             QuantumOver(rc_cpu) => {
-                //println!("T={} QuantumOver({:?})", sim.time, &rc_cpu);
+                //println!("T={} QuantumOver {:?}", sim.time, rc_cpu.borrow());
                 {
                     let mut cpu = rc_cpu.borrow_mut();
                     let procd_time = sim.time - cpu.quantum_start;
