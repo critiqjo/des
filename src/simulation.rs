@@ -35,9 +35,9 @@ pub struct SystemParams {
 #[derive(Debug)]
 pub struct SystemMetrics {
     pub time: f64,
-    pub n_req_proc: usize,
-    pub n_req_timeo: usize,
-    pub n_req_drops: usize,
+    pub n_processed: usize,
+    pub n_timedout: usize,
+    pub n_dropped: usize,
     pub sum_resp_time: f64,
     pub wt_sum_reqs_in_sys: f64, // time-weighted sum of |requests in system|
     pub total_cpu_time: f64,
@@ -68,7 +68,7 @@ fn sample_zero_lo<T: IndependentSample<f64>>(sampler: &T, rng: &mut ThreadRng) -
 }
 
 pub fn run(sys: &SystemParams) -> SystemMetrics {
-    let mut sim = SystemMetrics { time: 0.0, n_req_proc: 0, n_req_timeo: 0, n_req_drops: 0,
+    let mut sim = SystemMetrics { time: 0.0, n_processed: 0, n_timedout: 0, n_dropped: 0,
                                   sum_resp_time: 0.0, wt_sum_reqs_in_sys: 0.0, total_cpu_time: 0.0 };
     let mut reqs_in_sys = ReqsInSystem { last_mod_ts: 0.0, count: 0 };
     let mut events = BinaryHeap::new();
@@ -114,7 +114,7 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
                 } else if (rbuff.len() < sys.buffer_capacity) {
                     rbuff.push_back(rc_req);
                 } else {
-                    sim.n_req_drops += 1;
+                    sim.n_dropped += 1;
                     reqs_in_sys.count -= 1;
                     // The client cannot know the request was dropped right away.
                     // Therefore waits for a timeout, and then a retry think time,
@@ -149,7 +149,7 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
                     }
                     cpu.total_busy_time += sim.time - cpu.quantum_start;
                     sim.sum_resp_time += sim.time - rc_req.borrow().arrival_time;
-                    sim.n_req_proc += 1;
+                    sim.n_processed += 1;
                 }
 
                 if let Some(req) = tpool.pop_front() {
@@ -179,8 +179,8 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
             },
             Timeout(weak_req) => match weak_req.upgrade() {
                 Some(rc_req) => {
-                    println!("T={} Timedout! {:?}", sim.time, rc_req.borrow());
-                    sim.n_req_timeo += 1;
+                    //println!("T={} Timedout! {:?}", sim.time, rc_req.borrow());
+                    sim.n_timedout += 1;
                     let arrival_ts = sim.time + sample_zero_lo(&retry_think_sampler, &mut rng);
                     let total_service = service_sampler.ind_sample(&mut rng);
                     let timeout = timeout_sampler.ind_sample(&mut rng);

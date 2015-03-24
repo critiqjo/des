@@ -1,8 +1,9 @@
 [package]
 name = "des"
 version = "0.0.1"
-authors = ["critechar <john.ch.fr@gmail.com>"]
+authors = ["critechar <john.ch.fr@gmail.com>",
+           "samkit <samkit993@gmail.com>"]
 
 [dependencies]
-rand = "0.2.0"
+rand = "0.2"
 rustc-serialize = "0.3"

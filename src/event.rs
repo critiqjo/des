@@ -58,7 +58,7 @@ impl Ord for Event {
         if self == other {
             return Ordering::Equal;
         }
-        // Notice that the we flip the ordering here to make it a min-heap
+        // Flipped ordering: lowest timestamp - highest priority
         match other.timestamp.partial_cmp(&self.timestamp).unwrap() {
             Ordering::Equal => self._type.partial_cmp(&other._type).unwrap(),
             ord => ord,
