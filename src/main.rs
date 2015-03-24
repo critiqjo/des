@@ -29,7 +29,7 @@ fn main() {
     let avg_resp_time = sim.sum_resp_time/sim.n_processed as f64;
     let avg_cpu_util = sim.total_cpu_time / sim.time / sys.n_cpu as f64;
     let avg_reqs_in_sys = sim.wt_sum_reqs_in_sys / sim.total_cpu_time;
-    let ffrac = (sim.n_dropped + sim.n_timedout) as f64/(sim.n_processed + sim.n_dropped) as f64;
+    let ffrac = (sim.n_dropped + n_processed_to) as f64/(sim.n_dropped + sim.n_processed) as f64;
     println!("
   Avg arrival rate = {}
   Avg throughput = {}
