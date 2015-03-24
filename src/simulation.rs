@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::collections::BinaryHeap;
 use std::collections::VecDeque;
 
-use rand::thread_rng;
+use rand::{ThreadRng, thread_rng};
 use rand::distributions::IndependentSample;
 use rand::distributions::{Exp, Normal, Range};
 
@@ -56,6 +56,11 @@ fn event_after_proc(rc_req: Rc<RefCell<Request>>, rc_cpu: Rc<RefCell<Cpu>>, simt
     }
 }
 
+fn sample_zero_lo<T: IndependentSample<f64>>(sampler: &T, rng: &mut ThreadRng) -> f64 {
+    let sample = sampler.ind_sample(rng);
+    if sample < 0.0 { 0.0 } else { sample }
+}
+
 pub fn run(sys: &SystemParams) -> SystemMetrics {
     let mut sim = SystemMetrics { time: 0.0, sum_resp_time: 0.0, n_req_proc: 0,
                                   n_req_timeo: 0, n_req_drops: 0, total_cpu_time: 0.0 };
@@ -104,7 +109,7 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
                     // Therefore waits for a timeout, and then a retry think time,
                     // before issuing a new request.
                     let arrival_ts = sim.time + timeout_sampler.ind_sample(&mut rng) +
-                                                retry_think_sampler.ind_sample(&mut rng);
+                                                sample_zero_lo(&retry_think_sampler, &mut rng);
                     let total_service = service_sampler.ind_sample(&mut rng);
                     let timeout = timeout_sampler.ind_sample(&mut rng);
                     let (arrival_e, timeout_e) = Event::new_arrival(arrival_ts, total_service, timeout);
@@ -121,7 +126,7 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
                         CpuState::Idle => panic!("At the time of departure, CPU should not be IDLE."),
                     };
                     if weak_count(&rc_req) > 0 { // Request was not timed out
-                        let arrival_ts = sim.time + think_sampler.ind_sample(&mut rng);
+                        let arrival_ts = sim.time + sample_zero_lo(&think_sampler, &mut rng);
                         let total_service = service_sampler.ind_sample(&mut rng);
                         let timeout = timeout_sampler.ind_sample(&mut rng);
                         let (arrival_e, timeout_e) = Event::new_arrival(arrival_ts, total_service, timeout);
@@ -162,7 +167,7 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
                 Some(rc_req) => {
                     println!("T={} Timedout! {:?}", sim.time, rc_req.borrow());
                     sim.n_req_timeo += 1;
-                    let arrival_ts = sim.time + retry_think_sampler.ind_sample(&mut rng);
+                    let arrival_ts = sim.time + sample_zero_lo(&retry_think_sampler, &mut rng);
                     let total_service = service_sampler.ind_sample(&mut rng);
                     let timeout = timeout_sampler.ind_sample(&mut rng);
                     let (arrival_e, timeout_e) = Event::new_arrival(arrival_ts, total_service, timeout);
