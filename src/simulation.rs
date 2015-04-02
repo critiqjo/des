@@ -79,6 +79,7 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
     let mut rng = thread_rng();
     let mut cpus = Vec::with_capacity(sys.n_cpu);
     let mut idle_cpus = Vec::with_capacity(sys.n_cpu);
+    let mut n_threads = 0;
     for _ in 0..sys.n_cpu {
         let cpu = Rc::new(RefCell::new(Cpu::new()));
         idle_cpus.push(cpu.clone());
@@ -112,11 +113,14 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
                 sim.wt_sum_reqs_in_sys += (sim.time - reqs_in_sys.last_mod_ts)*reqs_in_sys.count as f64;
                 reqs_in_sys.count += 1;
                 reqs_in_sys.last_mod_ts = sim.time;
-                if let Some(rc_cpu) = idle_cpus.pop() {
-                    events.push(event_after_proc(rc_req, rc_cpu, sim.time, sys.quantum));
-                } else if (tpool.len() + sys.n_cpu < sys.threadpool_size) {
-                    tpool.push_back(rc_req);
-                } else if (rbuff.len() < sys.buffer_capacity) {
+                if n_threads < sys.threadpool_size {
+                    if let Some(rc_cpu) = idle_cpus.pop() {
+                        events.push(process_request(rc_req, rc_cpu, sim.time, sys.quantum));
+                    } else {
+                        tpool.push_back(rc_req);
+                    }
+                    n_threads += 1;
+                } else if rbuff.len() < sys.buffer_capacity {
                     rbuff.push_back(rc_req);
                 } else {
                     sim.n_dropped += 1;
@@ -163,8 +167,13 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
                     events.push(event_after_proc(req, rc_cpu, sim.time, sys.quantum));
                     if rbuff.len() > 0 {
                         tpool.push_back(rbuff.pop_front().unwrap());
+                    } else {
+                        n_threads -= 1;
                     }
+                } else if let Some(req) = rbuff.pop_front() {
+                    events.push(process_request(req, rc_cpu, sim.time, sys.quantum));
                 } else {
+                    n_threads -= 1;
                     rc_cpu.borrow_mut().state = CpuState::Idle;
                     idle_cpus.push(rc_cpu);
                 }
