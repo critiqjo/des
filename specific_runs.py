@@ -106,10 +106,10 @@ for x in frange(var_min, var_max, var_step):
     print('.'),
     stdout.flush()
 
+ffracs = [t + d for t, d in zip(tfracs, dfracs)]
 plot(var_pts, resp_times, var_name, "Response Time", "Response Times vs. "+var_name, outdir+"resptime_"+variable+".png");
 plot(var_pts, [tputs, gputs, bputs], var_name, ["Throughput", "Goodput", "Badput"],  "Throughput vs. "+var_name, outdir+"tput_"+variable+".png");
 plot(var_pts, utils, var_name, "Server CPU Utilization", "CPU Utilization vs. "+var_name, outdir+"util_"+variable+".png");
-plot(var_pts, tfracs, var_name, "Fraction of Requests Timeout", "Fraction of Requests Timedout vs. "+var_name, outdir+"tfracs_"+variable+".png");
-plot(var_pts, dfracs, var_name, "Fraction of Requests Dropped", "Fraction of Requests Failed vs. "+var_name, outdir+"dfracs_"+variable+".png");
+plot(var_pts, [ffracs, tfracs, dfracs], var_name, ["Total failed", "Timedout", "Dropped"], "Fraction of Requests Failed vs. "+var_name, outdir+"ffracs_"+variable+".png");
 print "Plots are generated"
 
