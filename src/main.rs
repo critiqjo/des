@@ -20,6 +20,7 @@ struct SimResult {
     goodput: f64,
     resp_time: f64,
     cpu_util: f64,
+    ctxx_busytime_frac: f64,
     reqs_in_sys: f64,
     failed_frac: f64,
 }
@@ -34,13 +35,15 @@ fn main() {
     };
     let sim = simulation::run(&sys);
     let n_processed_to = sim.n_timedout - sim.n_to_in_proc;
+    let total_cpu_time = sim.total_procd_time + sim.total_ctxx_time;
     let sim_res = SimResult {
         arrival_rate: sim.n_arrivals as f64 / sim.time,
         throughput: sim.n_processed as f64/sim.time,
         goodput: (sim.n_processed - n_processed_to) as f64/sim.time,
         resp_time: sim.sum_resp_time/sim.n_processed as f64,
-        cpu_util: sim.total_cpu_time / sim.time / sys.n_cpu as f64,
-        reqs_in_sys: sim.wt_sum_reqs_in_sys / sim.total_cpu_time,
+        cpu_util: total_cpu_time / sim.time / sys.n_cpu as f64,
+        ctxx_busytime_frac: sim.total_ctxx_time / total_cpu_time,
+        reqs_in_sys: sim.wt_sum_reqs_in_sys / sim.total_procd_time,
         failed_frac: (sim.n_dropped + n_processed_to) as f64/(sim.n_dropped + sim.n_processed) as f64,
     };
     println!("{}", json::as_pretty_json(&sim_res));

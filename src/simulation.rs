@@ -21,6 +21,7 @@ pub struct SystemParams {
     pub buffer_capacity: usize,
     pub threadpool_size: usize,
     pub quantum: f64,
+    pub ctxx_time: f64,
 
     pub service_time_mean: f64,
     pub req_timeout_min: f64,
@@ -42,7 +43,8 @@ pub struct SystemMetrics {
     pub n_to_in_proc: usize, // timed-out but still in process
     pub sum_resp_time: f64,
     pub wt_sum_reqs_in_sys: f64, // time-weighted sum of |requests in system|
-    pub total_cpu_time: f64,
+    pub total_procd_time: f64,
+    pub total_ctxx_time: f64,
 }
 
 struct ReqsInSystem {
@@ -51,18 +53,22 @@ struct ReqsInSystem {
     to_count: usize, // timed out requests in sys
 }
 
+fn is_approx_zero(f: f64) -> bool {
+    -1.0e-12 < f && f < 1.0e-12
+}
+
 fn process_request(rc_req: Rc<RefCell<Request>>, rc_cpu: Rc<RefCell<Cpu>>, simtime: f64, quantum: f64) -> Event {
     {
         let mut cpu = rc_cpu.borrow_mut();
-        cpu.state = CpuState::Busy(rc_req.clone());
-        cpu.quantum_start = simtime;
+        cpu.state = CpuState::Busy(rc_req.clone(), simtime);
     }
     let rem_serv = rc_req.borrow().remaining_service;
-    if rem_serv < quantum {
-        Event::new(EventType::Departure(rc_cpu.clone()), simtime + rem_serv)
+    let ev_ts = if rem_serv < quantum {
+        simtime + rem_serv
     } else {
-        Event::new(EventType::QuantumOver(rc_cpu.clone()), simtime + quantum)
-    }
+        simtime + quantum
+    };
+    Event::new(EventType::QuantumOver(rc_cpu.clone()), ev_ts)
 }
 
 fn sample_zero_lo<T: IndependentSample<f64>>(sampler: &T, rng: &mut ThreadRng) -> f64 {
@@ -71,9 +77,10 @@ fn sample_zero_lo<T: IndependentSample<f64>>(sampler: &T, rng: &mut ThreadRng) -
 }
 
 pub fn run(sys: &SystemParams) -> SystemMetrics {
-    let mut sim = SystemMetrics { time: 0.0, n_arrivals:0, n_processed: 0, n_timedout: 0,
-                                  n_dropped: 0, n_to_in_proc: 0, sum_resp_time: 0.0,
-                                  wt_sum_reqs_in_sys: 0.0, total_cpu_time: 0.0 };
+    let mut sim = SystemMetrics { time: 0.0, n_arrivals:0, n_processed: 0,
+                                  n_timedout: 0, n_dropped: 0, n_to_in_proc: 0,
+                                  sum_resp_time: 0.0, wt_sum_reqs_in_sys: 0.0,
+                                  total_procd_time: 0.0, total_ctxx_time: 0.0 };
     let mut reqs_in_sys = ReqsInSystem { last_mod_ts: 0.0, count: 0, to_count: 0 };
     let mut events = BinaryHeap::new();
     let mut rng = thread_rng();
@@ -137,17 +144,12 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
                     events.push(timeout_e);
                 }
             },
-            Departure(rc_cpu) => {
-                //println!("T={} Departure {:?}", sim.time, rc_cpu.borrow());
+            Departure(rc_req) => {
+                //println!("T={} Departure {:?}", sim.time, rc_req.borrow());
                 sim.wt_sum_reqs_in_sys += (sim.time - reqs_in_sys.last_mod_ts)*reqs_in_sys.count as f64;
                 reqs_in_sys.count -= 1;
                 reqs_in_sys.last_mod_ts = sim.time;
                 {
-                    let mut cpu = rc_cpu.borrow_mut();
-                    let rc_req = match cpu.state {
-                        CpuState::Busy(ref rc_req) => rc_req.clone(),
-                        CpuState::Idle => panic!("Fatal: Cpu was Idle at a Departure!"),
-                    };
                     if weak_count(&rc_req) > 0 { // Request was not timed out
                         let arrival_ts = sim.time + sample_zero_lo(&think_sampler, &mut rng);
                         let total_service = service_sampler.ind_sample(&mut rng);
@@ -158,40 +160,53 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
                     } else {
                         reqs_in_sys.to_count -= 1;
                     }
-                    cpu.total_busy_time += sim.time - cpu.quantum_start;
                     sim.sum_resp_time += sim.time - rc_req.borrow().arrival_time;
                     sim.n_processed += 1;
                 }
+            },
+            CtxSwitched(rc_cpu) => {
+                //println!("T={} CtxSwitched {:?}", sim.time, rc_cpu.borrow());
+                let (rc_req_new, rc_req_old, ctxx_start) = match rc_cpu.borrow().state {
+                    CpuState::CtxSwitching( ref rc_req_new, ref rc_req_old, ctxx_start ) => ( rc_req_new.clone(), rc_req_old.clone(), ctxx_start ),
+                    _ => panic!("Fatal: Cpu was not CtxSwitching at a CtxSwitched!"),
+                };
+                rc_cpu.borrow_mut().total_ctxx_time += sim.time - ctxx_start;
 
-                if let Some(req) = tpool.pop_front() {
-                    events.push(process_request(req, rc_cpu, sim.time, sys.quantum));
-                    if rbuff.len() > 0 {
-                        tpool.push_back(rbuff.pop_front().unwrap());
+                let rem_serv = rc_req_old.borrow().remaining_service;
+                if is_approx_zero(rem_serv) {
+                    events.push(Event::new(EventType::Departure(rc_req_old), sim.time));
+                } else {
+                    tpool.push_back(rc_req_old);
+                }
+                events.push(process_request(rc_req_new, rc_cpu, sim.time, sys.quantum));
+            },
+            QuantumOver(rc_cpu) => {
+                //println!("T={} QuantumOver {:?}", sim.time, rc_cpu.borrow());
+                let rc_req_old: Rc<RefCell<Request>> = {
+                    let mut cpu = rc_cpu.borrow_mut();
+                    let ( rc_req, procd_time ) = if let CpuState::Busy( ref rc_req, quantum_start ) = cpu.state {
+                        ( rc_req.clone(), sim.time - quantum_start )
                     } else {
-                        n_threads -= 1;
-                    }
-                } else if let Some(req) = rbuff.pop_front() {
-                    events.push(process_request(req, rc_cpu, sim.time, sys.quantum));
+                        panic!("Fatal: Cpu was not Busy at a QuantumOver!")
+                    };
+                    rc_req.borrow_mut().remaining_service -= procd_time;
+                    cpu.total_procd_time += procd_time;
+                    rc_req
+                };
+                if let Some(rc_req_new) = tpool.pop_front() {
+                    rc_cpu.borrow_mut().state = CpuState::CtxSwitching(rc_req_new, rc_req_old, sim.time);
+                    events.push(Event::new(EventType::CtxSwitched(rc_cpu), sim.time + sys.ctxx_time));
+                } else if !is_approx_zero(rc_req_old.borrow().remaining_service) { // > 0.0
+                    events.push(process_request(rc_req_old, rc_cpu, sim.time, sys.quantum));
+                } else if let Some(rc_req_new) = rbuff.pop_front() { // logical?
+                    rc_cpu.borrow_mut().state = CpuState::CtxSwitching(rc_req_new, rc_req_old, sim.time);
+                    events.push(Event::new(EventType::CtxSwitched(rc_cpu), sim.time + sys.ctxx_time));
                 } else {
                     n_threads -= 1;
                     rc_cpu.borrow_mut().state = CpuState::Idle;
                     idle_cpus.push(rc_cpu);
+                    events.push(Event::new(EventType::Departure(rc_req_old), sim.time));
                 }
-            },
-            QuantumOver(rc_cpu) => {
-                //println!("T={} QuantumOver {:?}", sim.time, rc_cpu.borrow());
-                {
-                    let mut cpu = rc_cpu.borrow_mut();
-                    let procd_time = sim.time - cpu.quantum_start;
-                    cpu.total_busy_time += procd_time;
-                    if let CpuState::Busy( ref rc_req ) = cpu.state {
-                        rc_req.borrow_mut().remaining_service -= procd_time;
-                        tpool.push_back(rc_req.clone());
-                    } else {
-                        panic!("Cpu should have been busy!");
-                    }
-                }
-                events.push(process_request(tpool.pop_front().unwrap(), rc_cpu, sim.time, sys.quantum));
             },
             Timeout(weak_req) => match weak_req.upgrade() {
                 Some(rc_req) => {
@@ -213,10 +228,12 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
             break;
         }
     }
-    sim.total_cpu_time = cpus.into_iter().fold(0.0, |sum, cpu_rc| {
+    let (total_procd_time, total_ctxx_time) = cpus.into_iter().fold((0.0, 0.0), |sum, cpu_rc| {
         let cpu = cpu_rc.borrow();
-        sum + cpu.total_busy_time
+        (sum.0 + cpu.total_procd_time, sum.1 + cpu.total_ctxx_time)
     });
+    sim.total_procd_time = total_procd_time;
+    sim.total_ctxx_time = total_ctxx_time;
     sim.n_to_in_proc = reqs_in_sys.to_count;
     sim
 }

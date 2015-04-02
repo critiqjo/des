@@ -8,7 +8,8 @@ use request::Request;
 #[derive(Debug)]
 pub enum EventType {
     Arrival(Rc<RefCell<Request>>),
-    Departure(Rc<RefCell<Cpu>>),
+    CtxSwitched(Rc<RefCell<Cpu>>),
+    Departure(Rc<RefCell<Request>>),
     QuantumOver(Rc<RefCell<Cpu>>),
     Timeout(Weak<RefCell<Request>>)
 }
