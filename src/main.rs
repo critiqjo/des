@@ -22,7 +22,8 @@ struct SimResult {
     cpu_util: f64,
     ctxx_busytime_frac: f64,
     reqs_in_sys: f64,
-    failed_frac: f64,
+    dropped_frac: f64,
+    timedout_frac: f64,
 }
 
 fn main() {
@@ -44,7 +45,8 @@ fn main() {
         cpu_util: total_cpu_time / sim.time / sys.n_cpu as f64,
         ctxx_busytime_frac: sim.total_ctxx_time / total_cpu_time,
         reqs_in_sys: sim.wt_sum_reqs_in_sys / sim.total_procd_time,
-        failed_frac: (sim.n_dropped + n_processed_to) as f64/(sim.n_dropped + sim.n_processed) as f64,
+        dropped_frac: sim.n_dropped as f64/(sim.n_dropped + sim.n_processed) as f64,
+        timedout_frac: n_processed_to as f64/(sim.n_dropped + sim.n_processed) as f64,
     };
     println!("{}", json::as_pretty_json(&sim_res));
 }
