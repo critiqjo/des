@@ -1,1 +1,0 @@
-{"service_time_mean": 1.5, "retry_think_time_mean": 1.0, "retry_think_time_std_dev": 1.0, "n_users": 107, "threadpool_size": 50, "think_time_std_dev": 8.0, "req_timeout_min": 10.0, "max_iters": 40000, "ease_in_time": 20, "n_cpu": 4, "buffer_capacity": 1000, "think_time_mean": 24.0, "quantum": 0.5, "ctxx_time": 0.05, "req_timeout_max": 30.0}

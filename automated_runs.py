@@ -1,7 +1,7 @@
 import json,  subprocess, os;
 import matplotlib.pyplot as plt
 from math import sqrt
-from scipy import stats 
+from scipy import stats
 
 def plot(xs, ys, xtitle, ytitle,main_title, file_name, scatter=False):
     fig = plt.figure()
@@ -44,7 +44,7 @@ n_users_end = sys["n_users_end"]
 del sys["n_users_start"]
 del sys["n_users_end"]
 
-cargo = subprocess.Popen(['cargo', 'build']) 
+cargo = subprocess.Popen(['cargo', 'build'])
 cargo.wait()
 
 #Simulation for Computing Condidence Interval for Reponse Time with Error Rate 5%
@@ -52,18 +52,11 @@ error_rate = 0.05
 r_times = []
 sys["n_users"] = 40
 for i in range(1, 30):
-    infile = open("single_run.json", "r+")
-    infile.truncate()
-    infile.write(json.dumps(sys))
-    infile.flush()
-    infile.seek(0)
-    sim_run = subprocess.Popen(['target/debug/des'], stdin=infile, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-    sim_run.wait()
-    infile.close()
-    res = json.load(sim_run.stdout)
+    sim_run = subprocess.Popen(['target/debug/des'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    res = json.loads(sim_run.communicate(json.dumps(sys))[0])
     r_times.append(res["resp_time"])
 resp_lb, resp_ub = conf_ivals(r_times, error_rate)
-print "\nConfidence Interval of Response Time for Error Rate 5% : ", resp_lb, resp_ub
+print "\n95% Confidence Interval of Response Time: ", resp_lb, resp_ub
 
 #Simulation with varied number of users
 n_users = []
@@ -77,7 +70,7 @@ dfracs = []
 drates = []
 
 
-for x in range(n_users_start, n_users_end):
+for x in range(n_users_start, n_users_end, 2):
     n_users.append(x)
     temp_tput = 0.0
     temp_gput = 0.0
@@ -87,19 +80,11 @@ for x in range(n_users_start, n_users_end):
     temp_dfrac = 0.0
     temp_drate = 0.0
     temp_resp_time = 0.0
-    
+
     for i in range(0,3):
-        sys["n_users"] = x 
-        #Make sure file is present
-        infile = open("single_run.json", "r+")
-        infile.truncate()
-        infile.write(json.dumps(sys))
-        infile.flush()
-        infile.seek(0)
-        sim_run = subprocess.Popen(['target/debug/des'], stdin=infile, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-        sim_run.wait()
-        infile.close()
-        res = json.load(sim_run.stdout)
+        sys["n_users"] = x
+        sim_run = subprocess.Popen(['target/debug/des'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        res = json.loads(sim_run.communicate(json.dumps(sys))[0])
         temp_tput += res["throughput"]
         temp_gput += res["goodput"]
         temp_bput += (res["throughput"] - res["goodput"])
