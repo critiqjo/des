@@ -1,0 +1,24 @@
+{
+  "n_cpu": 4,
+  "n_users": 64,
+  "ease_in_time": 20.0,
+  "max_iters": 50000,
+  "buffer_capacity": 100,
+  "threadpool_size": 40,
+  "quantum": 0.5,
+  "ctxx_time": 0.5,
+  "service_time_mean": 2.0,
+  "req_timeout_min": 10.0,
+  "req_timeout_max": 30.0,
+  "think_time_mean": 24.0,
+  "think_time_std_dev": 8.0,
+  "retry_think_time_mean": 2.0,
+  "retry_think_time_std_dev": 1.0,
+
+  "variable": "ctxx_time",
+  "var_name": "Context switch delay",
+  "var_min": 0.05,
+  "var_max": 1.0,
+  "var_step": 0.05,
+  "outdir": "ctxx/"
+}
