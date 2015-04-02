@@ -4,15 +4,17 @@ from sys import stdout
 from math import sqrt
 from scipy import stats
 
-def plot(xs, ys, xtitle, ytitle,main_title, file_name, scatter=False):
+def plot(xs, ys, xtitle, ytitle, main_title, file_name):
     fig = plt.figure()
-    if scatter:
-        plt.scatter(xs,ys)
+    if type(ys[0]) is list:
+        for y in ys:
+            plt.plot(xs, y)
+        plt.legend(ytitle)
     else:
         plt.plot(xs, ys)
-    plt.ylim([0,max(ys)*1.2])
+        plt.ylabel(ytitle)
+        #plt.ylim([0,max(ys)*1.2])
     plt.xlabel(xtitle)
-    plt.ylabel(ytitle)
     plt.title(main_title)
     plt.savefig(file_name, bbox_inches='tight')
     plt.close(fig)
@@ -104,12 +106,10 @@ for x in frange(var_min, var_max, var_step):
     print('.'),
     stdout.flush()
 
-plot(var_pts, resp_times, var_name, "Response Time", "Response Times Vs. "+var_name, outdir+"resptime_"+variable+".png");
-plot(var_pts, gputs, var_name, "Goodput",  "Goodput Vs. "+var_name, outdir+"gput_"+variable+".png");
-plot(var_pts, bputs, var_name, "Badput",  "Badput Vs. "+var_name, outdir+"bput_"+variable+".png");
-plot(var_pts, tputs, var_name, "Throughput",  "Througput Vs. "+var_name, outdir+"tput_"+variable+".png");
-plot(var_pts, utils, var_name, "Server CPU Utilization", "CPU Utilization Vs. "+var_name, outdir+"util_"+variable+".png");
-plot(var_pts, tfracs, var_name, "Fraction of Requests Timeout", "Fraction of Requests Timedout Vs. "+var_name, outdir+"tfracs_"+variable+".png");
-plot(var_pts, dfracs, var_name, "Fraction of Requests Dropped", "Fraction of Requests Failed Vs. "+var_name, outdir+"dfracs_"+variable+".png");
+plot(var_pts, resp_times, var_name, "Response Time", "Response Times vs. "+var_name, outdir+"resptime_"+variable+".png");
+plot(var_pts, [tputs, gputs, bputs], var_name, ["Throughput", "Goodput", "Badput"],  "Throughput vs. "+var_name, outdir+"tput_"+variable+".png");
+plot(var_pts, utils, var_name, "Server CPU Utilization", "CPU Utilization vs. "+var_name, outdir+"util_"+variable+".png");
+plot(var_pts, tfracs, var_name, "Fraction of Requests Timeout", "Fraction of Requests Timedout vs. "+var_name, outdir+"tfracs_"+variable+".png");
+plot(var_pts, dfracs, var_name, "Fraction of Requests Dropped", "Fraction of Requests Failed vs. "+var_name, outdir+"dfracs_"+variable+".png");
 print "Plots are generated"
 
