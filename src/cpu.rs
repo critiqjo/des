@@ -3,11 +3,17 @@ use std::cell::RefCell;
 
 use request::Request;
 
+type RcRequest = Rc<RefCell<Request>>;
+type NewRequest = RcRequest;
+type OldRequest = RcRequest;
+type QuantumStart = f64;
+type CtxxStart = f64;
+
 #[derive(Debug)]
 pub enum CpuState {
     Idle,
-    Busy(Rc<RefCell<Request>>, f64), // (req, quantum_start)
-    CtxSwitching(Rc<RefCell<Request>>, Rc<RefCell<Request>>, f64), // (new, old, ctxx_start)
+    Busy(RcRequest, QuantumStart),
+    CtxSwitching(NewRequest, OldRequest, CtxxStart),
 }
 
 #[derive(Debug)]
