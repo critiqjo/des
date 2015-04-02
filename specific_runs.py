@@ -107,6 +107,11 @@ for x in frange(var_min, var_max, var_step):
     stdout.flush()
 
 ffracs = [t + d for t, d in zip(tfracs, dfracs)]
+try: 
+    os.makedirs(outdir)
+except OSError:
+    if not os.path.isdir(outdir):
+        raise
 plot(var_pts, resp_times, var_name, "Response Time", "Response Times vs. "+var_name, outdir+"resptime_"+variable+".png");
 plot(var_pts, [tputs, gputs, bputs], var_name, ["Throughput", "Goodput", "Badput"],  "Throughput vs. "+var_name, outdir+"tput_"+variable+".png");
 plot(var_pts, utils, var_name, "Server CPU Utilization", "CPU Utilization vs. "+var_name, outdir+"util_"+variable+".png");

@@ -35,7 +35,7 @@ def conf_ivals(samples, error):
 
 
 sys = dict()
-multi_run_file = open("multi_run.json", "r")
+multi_run_file = open("auto_runs.json", "r")
 sys = json.load(multi_run_file)
 multi_run_file.close()
 
