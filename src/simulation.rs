@@ -149,20 +149,18 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
                 sim.wt_sum_reqs_in_sys += (sim.time - reqs_in_sys.last_mod_ts)*reqs_in_sys.count as f64;
                 reqs_in_sys.count -= 1;
                 reqs_in_sys.last_mod_ts = sim.time;
-                {
-                    if weak_count(&rc_req) > 0 { // Request was not timed out
-                        let arrival_ts = sim.time + sample_zero_lo(&think_sampler, &mut rng);
-                        let total_service = service_sampler.ind_sample(&mut rng);
-                        let timeout = timeout_sampler.ind_sample(&mut rng);
-                        let (arrival_e, timeout_e) = Event::new_arrival(arrival_ts, total_service, timeout);
-                        events.push(arrival_e);
-                        events.push(timeout_e);
-                    } else {
-                        reqs_in_sys.to_count -= 1;
-                    }
-                    sim.sum_resp_time += sim.time - rc_req.borrow().arrival_time;
-                    sim.n_processed += 1;
+                if weak_count(&rc_req) > 0 { // Request was not timed out
+                    let arrival_ts = sim.time + sample_zero_lo(&think_sampler, &mut rng);
+                    let total_service = service_sampler.ind_sample(&mut rng);
+                    let timeout = timeout_sampler.ind_sample(&mut rng);
+                    let (arrival_e, timeout_e) = Event::new_arrival(arrival_ts, total_service, timeout);
+                    events.push(arrival_e);
+                    events.push(timeout_e);
+                } else {
+                    reqs_in_sys.to_count -= 1;
                 }
+                sim.sum_resp_time += sim.time - rc_req.borrow().arrival_time;
+                sim.n_processed += 1;
             },
             CtxSwitched(rc_cpu) => {
                 //println!("T={} CtxSwitched {:?}", sim.time, rc_cpu.borrow());
