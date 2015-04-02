@@ -51,7 +51,7 @@ struct ReqsInSystem {
     to_count: usize, // timed out requests in sys
 }
 
-fn event_after_proc(rc_req: Rc<RefCell<Request>>, rc_cpu: Rc<RefCell<Cpu>>, simtime: f64, quantum: f64) -> Event {
+fn process_request(rc_req: Rc<RefCell<Request>>, rc_cpu: Rc<RefCell<Cpu>>, simtime: f64, quantum: f64) -> Event {
     {
         let mut cpu = rc_cpu.borrow_mut();
         cpu.state = CpuState::Busy(rc_req.clone());
@@ -146,7 +146,7 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
                     let mut cpu = rc_cpu.borrow_mut();
                     let rc_req = match cpu.state {
                         CpuState::Busy(ref rc_req) => rc_req.clone(),
-                        CpuState::Idle => panic!("At the time of departure, CPU should not be IDLE."),
+                        CpuState::Idle => panic!("Fatal: Cpu was Idle at a Departure!"),
                     };
                     if weak_count(&rc_req) > 0 { // Request was not timed out
                         let arrival_ts = sim.time + sample_zero_lo(&think_sampler, &mut rng);
@@ -164,7 +164,7 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
                 }
 
                 if let Some(req) = tpool.pop_front() {
-                    events.push(event_after_proc(req, rc_cpu, sim.time, sys.quantum));
+                    events.push(process_request(req, rc_cpu, sim.time, sys.quantum));
                     if rbuff.len() > 0 {
                         tpool.push_back(rbuff.pop_front().unwrap());
                     } else {
@@ -191,7 +191,7 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
                         panic!("Cpu should have been busy!");
                     }
                 }
-                events.push(event_after_proc(tpool.pop_front().unwrap(), rc_cpu, sim.time, sys.quantum));
+                events.push(process_request(tpool.pop_front().unwrap(), rc_cpu, sim.time, sys.quantum));
             },
             Timeout(weak_req) => match weak_req.upgrade() {
                 Some(rc_req) => {
