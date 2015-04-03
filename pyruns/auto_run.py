@@ -1,10 +1,11 @@
-import json,  subprocess, os;
+import json, subprocess, os;
 import matplotlib.pyplot as plt
 import numpy as np
 from sys import stdout
 from math import sqrt
 from scipy import stats
 
+basedir = os.path.dirname(os.path.abspath(__file__)) + "/"
 def plot(xs, ys, xtitle, ytitle, main_title, file_name, plttype="plot", yerrs=[]):
     fig = plt.figure(figsize=(12, 7.5), dpi=80)
     if plttype=="scatter":
@@ -13,7 +14,7 @@ def plot(xs, ys, xtitle, ytitle, main_title, file_name, plttype="plot", yerrs=[]
         plt.errorbar(xs, ys, yerr=yerrs, fmt="-o")
     elif plttype=="logerrorbar":
         plt.errorbar(xs, ys, yerr=yerrs, fmt="-o")
-        plt.yscale('log')
+        plt.yscale("log")
         p2 = np.exp2(np.arange( np.ceil(np.log2(max(ys))) + 1 ))
         plt.yticks(p2, p2)
     elif type(ys[0]) is list:
@@ -25,7 +26,7 @@ def plot(xs, ys, xtitle, ytitle, main_title, file_name, plttype="plot", yerrs=[]
         plt.ylabel(ytitle)
     plt.xlabel(xtitle)
     plt.title(main_title)
-    plt.savefig(file_name, bbox_inches='tight')
+    plt.savefig(file_name, bbox_inches="tight")
     plt.close(fig)
 
 def mean(samples):
@@ -45,12 +46,13 @@ def conf_ival(samples, error):
     alpha = stats.norm.ppf(1 - error/2)
     return (m, sd*alpha/sqrt(n))
 
+des = os.path.relpath(basedir + "../target/debug/des")
 def sim_run(sys_pars):
-    sim_proc = subprocess.Popen(['target/debug/des'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    sim_proc = subprocess.Popen([des], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     return json.loads(sim_proc.communicate(json.dumps(sys_pars))[0])
 
 sys_pars = dict()
-runs_file = open("auto_runs.json", "r")
+runs_file = open(basedir + "auto_pars.json", "r")
 sys_pars = json.load(runs_file)
 runs_file.close()
 
@@ -62,9 +64,6 @@ del sys_pars["n_users_start"]
 del sys_pars["n_users_end"]
 del sys_pars["n_users_step"]
 del sys_pars["runs_per_step"]
-
-cargo = subprocess.Popen(['cargo', 'build'])
-cargo.wait()
 
 n_users = []
 resp_times = []
@@ -95,7 +94,7 @@ for x in range(n_users_start, n_users_end, n_users_step):
     temp_resp = []
 
     sys_pars["n_users"] = x
-    print 'n_users =', x,
+    print "n_users =", x,
     n = runs_per_step
     for i in range(0, n):
         res = sim_run(sys_pars)
@@ -112,7 +111,7 @@ for x in range(n_users_start, n_users_end, n_users_step):
         all_resps.append(res["resp_time"])
         all_utils.append(res["cpu_util"])
 
-        print '.',
+        print ".",
         stdout.flush()
 
     tputs.append(temp_tput/n)
