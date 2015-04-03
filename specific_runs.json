@@ -6,7 +6,7 @@
   "buffer_capacity": 200,
   "threadpool_size": 40,
   "quantum": 0.5,
-  "ctxx_time": 0.4,
+  "ctxx_time": 0.5,
   "service_time_mean": 2.0,
   "req_timeout_min": 10.0,
   "req_timeout_max": 30.0,
