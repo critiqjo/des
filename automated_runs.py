@@ -1,19 +1,29 @@
 import json,  subprocess, os;
 import matplotlib.pyplot as plt
+import numpy as np
+from sys import stdout
 from math import sqrt
 from scipy import stats
 
-def plot(xs, ys, xtitle, ytitle,main_title, file_name, scatter=False, errorbar=False, error_rate=0.0, intervals=[]):
-    fig = plt.figure()
-    if scatter:
-        plt.scatter(xs,ys)
-        if errorbar:
-            plt.errorbar(xs, ys, yerr=intervals, linestyle="None")
+def plot(xs, ys, xtitle, ytitle, main_title, file_name, plttype="plot", yerrs=[]):
+    fig = plt.figure(figsize=(12, 7.5), dpi=80)
+    if plttype=="scatter":
+        plt.scatter(xs, ys, marker="x")
+    elif plttype=="errorbar":
+        plt.errorbar(xs, ys, yerr=yerrs, fmt="-o")
+    elif plttype=="logerrorbar":
+        plt.errorbar(xs, ys, yerr=yerrs, fmt="-o")
+        plt.yscale('log')
+        p2 = np.exp2(np.arange( np.ceil(np.log2(max(ys))) + 1 ))
+        plt.yticks(p2, p2)
+    elif type(ys[0]) is list:
+        for y in ys:
+            plt.plot(xs, y)
+        plt.legend(ytitle, loc="upper left")
     else:
         plt.plot(xs, ys)
-    plt.ylim([0,max(ys)*1.2])
+        plt.ylabel(ytitle)
     plt.xlabel(xtitle)
-    plt.ylabel(ytitle)
     plt.title(main_title)
     plt.savefig(file_name, bbox_inches='tight')
     plt.close(fig)
@@ -28,39 +38,34 @@ def std(samples):
     std = [sqrt(x) for x in variance]
     return sum(std)
 
-def conf_ivals(samples, error):
+def conf_ival(samples, error):
     n = len(samples)
     m = mean(samples)
     sd = std(samples)
     alpha = stats.norm.ppf(1 - error/2)
-    return (m - sd*alpha/sqrt(n), m + sd*alpha/sqrt(n))
+    return (m, sd*alpha/sqrt(n))
 
-def compute_ci(sys, variable, error_rate, iters):
-    vec = []
-    sys[variable] = 40
-    for i in range(1, iters+1):
-        sim_run = subprocess.Popen(['target/debug/des'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-        res = json.loads(sim_run.communicate(json.dumps(sys))[0])
-        vec.append(res[variable])
-    resp_lb, resp_ub = conf_ivals(vec, error_rate)
-    return resp_lb, mean(vec), resp_ub
+def sim_run(sys_pars):
+    sim_proc = subprocess.Popen(['target/debug/des'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    return json.loads(sim_proc.communicate(json.dumps(sys_pars))[0])
 
+sys_pars = dict()
+runs_file = open("auto_runs.json", "r")
+sys_pars = json.load(runs_file)
+runs_file.close()
 
-sys = dict()
-multi_run_file = open("auto_runs.json", "r")
-sys = json.load(multi_run_file)
-multi_run_file.close()
-
-n_users_start = sys["n_users_start"]
-n_users_end = sys["n_users_end"]
-del sys["n_users_start"]
-del sys["n_users_end"]
+n_users_start = sys_pars["n_users_start"]
+n_users_end = sys_pars["n_users_end"]
+n_users_step = sys_pars["n_users_step"]
+runs_per_step = sys_pars["runs_per_step"]
+del sys_pars["n_users_start"]
+del sys_pars["n_users_end"]
+del sys_pars["n_users_step"]
+del sys_pars["runs_per_step"]
 
 cargo = subprocess.Popen(['cargo', 'build'])
 cargo.wait()
 
-
-#Simulation with varied number of users
 n_users = []
 resp_times = []
 utils = []
@@ -70,10 +75,15 @@ tputs = []
 tfracs = []
 dfracs = []
 drates = []
-ivals = []
-error_rate = 0.05
+resp_errs = []
 
-for x in range(n_users_start, n_users_end, 2):
+all_tputs = []
+all_resps = []
+all_utils = []
+
+conf_error = 0.05
+
+for x in range(n_users_start, n_users_end, n_users_step):
     n_users.append(x)
     temp_tput = 0.0
     temp_gput = 0.0
@@ -82,11 +92,13 @@ for x in range(n_users_start, n_users_end, 2):
     temp_tfrac = 0.0
     temp_dfrac = 0.0
     temp_drate = 0.0
-    temp_resp_time = 0.0
-    sys["n_users"] = x
-    for i in range(0,3):
-        sim_run = subprocess.Popen(['target/debug/des'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-        res = json.loads(sim_run.communicate(json.dumps(sys))[0])
+    temp_resp = []
+
+    sys_pars["n_users"] = x
+    print 'n_users =', x,
+    n = runs_per_step
+    for i in range(0, n):
+        res = sim_run(sys_pars)
         temp_tput += res["throughput"]
         temp_gput += res["goodput"]
         temp_bput += (res["throughput"] - res["goodput"])
@@ -94,31 +106,37 @@ for x in range(n_users_start, n_users_end, 2):
         temp_tfrac += res["timedout_frac"]
         temp_dfrac += res["dropped_frac"]
         temp_drate += res["drop_rate"]
-        temp_resp_time += res["resp_time"]
+        temp_resp.append(res["resp_time"])
 
-    (resp_lb, resp_mean, resp_ub) = compute_ci(sys, "resp_time", error_rate, 30)
-    ivals.append((resp_ub-resp_lb)/2)
-    print "Average response time ",resp_mean, " lies with ", (1-error_rate)*100,"% confidence in interval (", resp_lb, ",", resp_ub, ")"
-    tputs.append(temp_tput/3.0)
-    gputs.append(temp_gput/3.0)
-    bputs.append(temp_bput/3.0)
-    utils.append(temp_util/3.0)
-    tfracs.append(temp_tfrac/3.0)
-    dfracs.append(temp_dfrac/3.0)
-    drates.append(temp_drate/3.0)
+        all_tputs.append(res["throughput"])
+        all_resps.append(res["resp_time"])
+        all_utils.append(res["cpu_util"])
+
+        print '.',
+        stdout.flush()
+
+    tputs.append(temp_tput/n)
+    gputs.append(temp_gput/n)
+    bputs.append(temp_bput/n)
+    utils.append(temp_util/n)
+    tfracs.append(temp_tfrac/n)
+    dfracs.append(temp_dfrac/n)
+    drates.append(temp_drate/n)
+    (resp_mean, resp_err) = conf_ival(temp_resp, conf_error)
     resp_times.append(resp_mean)
+    resp_errs.append(resp_err)
+    print "\nAverage response time =", resp_mean, u"\xb1", resp_err, "with", (1-conf_error)*100, "% confidence"
 
-plot(n_users, resp_times, "Number of Users", "Response Time", "Response Times Vs. Number of Users ", "nusers_v_resp.png",True, True, error_rate, ivals)
-exit
-plot(n_users, gputs, "Number of Users", "Goodput",  "Goodput Vs. Number of Users", "gput_v_nusers.png");
-plot(n_users, bputs, "Number of Users", "Badput",  "Badput Vs. Number of Users", "bput_v_nusers.png");
-plot(n_users, tputs, "Number of Users", "Throughput",  "Througput Vs. Number of Users ", "tput_v_nusers.png");
-plot(n_users, utils, "Number of Users", "Server CPU Utilization", "CPU Utilization Vs. Number of Users", "util_v_nusers.png");
-plot(tputs, resp_times, "Throughput", "Response Time", "Response Time Vs. Throughput", "resp_v_tput.png", True);
-plot(tputs, utils, "Throughput", "Server CPU Utilization", "CPU Utilization Vs. Throughput", "util_v_tput.png");
-plot(tputs, utils, "Throughput", "Server CPU Utilization", "CPU Utilization Vs. Throughput", "util_v_tput.png", True);
-plot(n_users, tfracs, "Number of Users", "Fraction of Requests Timeout", "Fraction of Requests Timedout Vs. Number of Users", "tfracs_v_nusers.png");
-plot(n_users, dfracs, "Number of Users", "Fraction of Requests Dropped", "Fraction of Requests Failed Vs. Number of Users", "dfracs_v_nusers.png");
-plot(n_users, drates, "Number of Users", "Drop Rate", "Drop Rate Vs. Number of Users", "drate_v_nusers.png");
-print "Plots are generated"
+ffracs = [t + d for t, d in zip(tfracs, dfracs)]
+
+xlabel = "Number of Users"
+plot(n_users, resp_times, xlabel, "Response Time", "Response Times vs. "+xlabel, "resp_nusers.png", "errorbar", resp_errs)
+plot(n_users, resp_times, xlabel, "Response Time", "Response Times vs. "+xlabel, "resp_nusers_log.png", "logerrorbar", resp_errs)
+plot(n_users, [tputs, gputs, bputs], xlabel, ["Throughput", "Goodput", "Badput"],  "Throughput vs. "+xlabel, "tput_nusers.png");
+plot(n_users, utils, xlabel, "CPU Utilization", "CPU Utilization vs. "+xlabel, "util_nusers.png");
+plot(n_users, [ffracs, tfracs, dfracs], xlabel, ["Total failed", "Timedout", "Dropped"], "Fraction of Requests Failed vs. "+xlabel, "ffracs_nusers.png");
+plot(n_users, drates, xlabel, "Drop Rate", "Drop Rate vs. "+xlabel, "drate_nusers.png");
+plot(all_tputs, all_resps, "Throughput", "Response Time", "Response Time vs. Throughput", "resp_tput.png", "scatter");
+plot(all_tputs, all_utils, "Throughput", "Server CPU Utilization", "CPU Utilization vs. Throughput", "util_tput.png", "scatter");
+print "\nComplete!"
 

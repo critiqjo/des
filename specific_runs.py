@@ -5,15 +5,14 @@ from math import sqrt
 from scipy import stats
 
 def plot(xs, ys, xtitle, ytitle, main_title, file_name):
-    fig = plt.figure()
+    fig = plt.figure(figsize=(12, 7.5), dpi=80)
     if type(ys[0]) is list:
         for y in ys:
             plt.plot(xs, y)
-        plt.legend(ytitle)
+        plt.legend(ytitle, loc="upper left")
     else:
         plt.plot(xs, ys)
         plt.ylabel(ytitle)
-        #plt.ylim([0,max(ys)*1.2])
     plt.xlabel(xtitle)
     plt.title(main_title)
     plt.savefig(file_name, bbox_inches='tight')
@@ -29,35 +28,36 @@ def std(samples):
     std = [sqrt(x) for x in variance]
     return sum(std)
 
-def conf_ivals(samples, error):
-    n = len(samples)
-    m = mean(samples)
-    sd = std(samples)
-    alpha = stats.norm.ppf(1 - error/2)
-    return (m - sd*alpha/sqrt(n), m + sd*alpha/sqrt(n))
 
-
-simsys = dict()
+sys_pars = dict()
 runs_file = open("specific_runs.json", "r")
-simsys = json.load(runs_file)
+sys_pars = json.load(runs_file)
 runs_file.close()
 
-variable = simsys["variable"]
-var_name = simsys["var_name"]
-var_min = simsys["var_min"]
-var_max = simsys["var_max"]
-var_step = simsys["var_step"]
-outdir = simsys["outdir"]
+variable = sys_pars["variable"]
+var_name = sys_pars["var_name"]
+var_min = sys_pars["var_min"]
+var_max = sys_pars["var_max"]
+var_step = sys_pars["var_step"]
+runs_per_step = sys_pars["runs_per_step"]
+outdir = sys_pars["outdir"]
 
-del simsys["variable"]
-del simsys["var_name"]
-del simsys["var_min"]
-del simsys["var_max"]
-del simsys["var_step"]
-del simsys["outdir"]
+del sys_pars["variable"]
+del sys_pars["var_name"]
+del sys_pars["var_min"]
+del sys_pars["var_max"]
+del sys_pars["var_step"]
+del sys_pars["outdir"]
+del sys_pars["runs_per_step"]
 
 cargo = subprocess.Popen(['cargo', 'build'])
 cargo.wait()
+
+try:
+    os.makedirs(outdir)
+except OSError:
+    if not os.path.isdir(outdir):
+        raise
 
 var_pts = []
 resp_times = []
@@ -67,7 +67,6 @@ bputs = []
 tputs = []
 tfracs = []
 dfracs = []
-drates = []
 
 def frange(x, y, step):
     while x < y:
@@ -82,13 +81,14 @@ for x in frange(var_min, var_max, var_step):
     temp_util = 0.0
     temp_tfrac = 0.0
     temp_dfrac = 0.0
-    temp_drate = 0.0
     temp_resp_time = 0.0
 
-    simsys[variable] = x
-    for i in range(0,3):
-        sim_run = subprocess.Popen(['target/debug/des'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-        res = json.loads(sim_run.communicate(json.dumps(simsys))[0])
+    sys_pars[variable] = x
+    print variable, '=', x,
+    n = runs_per_step
+    for i in range(0, n):
+        sim_proc = subprocess.Popen(['target/debug/des'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        res = json.loads(sim_proc.communicate(json.dumps(sys_pars))[0])
         temp_tput += res["throughput"]
         temp_gput += res["goodput"]
         temp_bput += (res["throughput"] - res["goodput"])
@@ -96,25 +96,21 @@ for x in frange(var_min, var_max, var_step):
         temp_tfrac += res["timedout_frac"]
         temp_dfrac += res["dropped_frac"]
         temp_resp_time += res["resp_time"]
-    tputs.append(temp_tput/3.0)
-    gputs.append(temp_gput/3.0)
-    bputs.append(temp_bput/3.0)
-    utils.append(temp_util/3.0)
-    tfracs.append(temp_tfrac/3.0)
-    dfracs.append(temp_dfrac/3.0)
-    resp_times.append(temp_resp_time/3.0)
-    print('.'),
-    stdout.flush()
+        print '.',
+        stdout.flush()
+    tputs.append(temp_tput/n)
+    gputs.append(temp_gput/n)
+    bputs.append(temp_bput/n)
+    utils.append(temp_util/n)
+    tfracs.append(temp_tfrac/n)
+    dfracs.append(temp_dfrac/n)
+    resp_times.append(temp_resp_time/n)
+    print '.'
 
 ffracs = [t + d for t, d in zip(tfracs, dfracs)]
-try: 
-    os.makedirs(outdir)
-except OSError:
-    if not os.path.isdir(outdir):
-        raise
 plot(var_pts, resp_times, var_name, "Response Time", "Response Times vs. "+var_name, outdir+"resptime_"+variable+".png");
 plot(var_pts, [tputs, gputs, bputs], var_name, ["Throughput", "Goodput", "Badput"],  "Throughput vs. "+var_name, outdir+"tput_"+variable+".png");
 plot(var_pts, utils, var_name, "Server CPU Utilization", "CPU Utilization vs. "+var_name, outdir+"util_"+variable+".png");
 plot(var_pts, [ffracs, tfracs, dfracs], var_name, ["Total failed", "Timedout", "Dropped"], "Fraction of Requests Failed vs. "+var_name, outdir+"ffracs_"+variable+".png");
-print "Plots are generated"
+print "\nComplete!"
 
