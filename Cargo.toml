@@ -5,5 +5,5 @@ authors = ["critechar <john.ch.fr@gmail.com>",
            "samkit <samkit993@gmail.com>"]
 
 [dependencies]
-rand = "0.2"
+rand = "0.3"
 rustc-serialize = "0.3"

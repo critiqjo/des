@@ -7,7 +7,7 @@ mod request;
 mod simulation;
 
 extern crate rand;
-extern crate "rustc-serialize" as rustc_serialize;
+extern crate rustc_serialize;
 
 use std::io::{self, Read};
 use std::borrow::Borrow;
