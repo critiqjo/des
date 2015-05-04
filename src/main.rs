@@ -45,7 +45,7 @@ fn main() {
         resp_time: sim.sum_resp_time/sim.n_processed as f64,
         cpu_util: total_cpu_time / sim.time / sys.n_cpu as f64,
         ctxx_busytime_frac: sim.total_ctxx_time / total_cpu_time,
-        reqs_in_sys: sim.wt_sum_reqs_in_sys / sim.total_procd_time,
+        reqs_in_sys: sim.wt_sum_reqs_in_sys / sim.time,
         dropped_frac: sim.n_dropped as f64/(sim.n_dropped + sim.n_processed) as f64,
         drop_rate: sim.n_dropped as f64/sim.time,
         timedout_frac: n_processed_to as f64/(sim.n_dropped + sim.n_processed) as f64,

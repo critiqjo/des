@@ -120,6 +120,9 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
                 sim.wt_sum_reqs_in_sys += (sim.time - reqs_in_sys.last_mod_ts)*reqs_in_sys.count as f64;
                 reqs_in_sys.count += 1;
                 reqs_in_sys.last_mod_ts = sim.time;
+                debug_assert!(n_threads <= reqs_in_sys.count,
+                              "n_thr {} n_req {} @ {}",
+                              n_threads, reqs_in_sys.count, sim.time);
                 if n_threads < sys.threadpool_size {
                     if let Some(rc_cpu) = idle_cpus.pop() {
                         events.push(process_request(rc_req, rc_cpu, sim.time, sys.quantum));
@@ -173,6 +176,7 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
                 let rem_serv = rc_req_old.borrow().remaining_service;
                 if is_approx_zero(rem_serv) {
                     events.push(Event::new(EventType::Departure(rc_req_old), sim.time));
+                    n_threads -= 1;
                 } else {
                     tpool.push_back(rc_req_old);
                 }
