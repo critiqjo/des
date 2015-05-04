@@ -168,7 +168,8 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
             CtxSwitched(rc_cpu) => {
                 //println!("T={} CtxSwitched {:?}", sim.time, rc_cpu.borrow());
                 let (rc_req_new, rc_req_old, ctxx_start) = match rc_cpu.borrow().state {
-                    CpuState::CtxSwitching( ref rc_req_new, ref rc_req_old, ctxx_start ) => ( rc_req_new.clone(), rc_req_old.clone(), ctxx_start ),
+                    CpuState::CtxSwitching( ref rc_req_new, ref rc_req_old, ctxx_start )
+                        => ( rc_req_new.clone(), rc_req_old.clone(), ctxx_start ),
                     _ => panic!("Fatal: Cpu was not CtxSwitching at a CtxSwitched!"),
                 };
                 rc_cpu.borrow_mut().total_ctxx_time += sim.time - ctxx_start;
@@ -186,10 +187,10 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
                 //println!("T={} QuantumOver {:?}", sim.time, rc_cpu.borrow());
                 let rc_req_old: Rc<RefCell<Request>> = {
                     let mut cpu = rc_cpu.borrow_mut();
-                    let ( rc_req, procd_time ) = if let CpuState::Busy( ref rc_req, quantum_start ) = cpu.state {
-                        ( rc_req.clone(), sim.time - quantum_start )
-                    } else {
-                        panic!("Fatal: Cpu was not Busy at a QuantumOver!")
+                    let ( rc_req, procd_time ) = match cpu.state {
+                        CpuState::Busy( ref rc_req, quantum_start )
+                            => ( rc_req.clone(), sim.time - quantum_start ),
+                        _ => panic!("Fatal: Cpu was not Busy at a QuantumOver!")
                     };
                     rc_req.borrow_mut().remaining_service -= procd_time;
                     cpu.total_procd_time += procd_time;

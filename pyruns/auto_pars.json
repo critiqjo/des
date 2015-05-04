@@ -2,21 +2,21 @@
   "n_cpu": 4,
   "ease_in_time": 20.0,
   "max_iters": 50000,
-  "buffer_capacity": 800,
-  "threadpool_size": 20,
+  "buffer_capacity": 1,
+  "threadpool_size": 150,
   "quantum": 0.5,
   "ctxx_time": 0.1,
-  "service_time_mean": 2.0,
-  "req_timeout_min": 10.0,
-  "req_timeout_max": 30.0,
-  "think_time_mean": 24.0,
-  "think_time_std_dev": 8.0,
+  "service_time_mean": 0.08,
+  "req_timeout_min": 300.0,
+  "req_timeout_max": 305.0,
+  "think_time_mean": 6.0,
+  "think_time_std_dev": 0.8,
   "retry_think_time_mean": 2.0,
   "retry_think_time_std_dev": 1.0,
 
-  "n_users_start": 4,
-  "n_users_end": 78,
-  "n_users_step": 2,
-  "runs_per_step": 20
+  "n_users_start": 20,
+  "n_users_end": 550,
+  "n_users_step": 20,
+  "runs_per_step": 5
 }
 
