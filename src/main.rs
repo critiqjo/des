@@ -1,4 +1,5 @@
-#![feature(alloc)]
+#![feature(rc_weak)]
+#![feature(rc_counts)]
 // suppress warning when using Weak, downgrade, weak_count
 
 mod cpu;
@@ -50,5 +51,6 @@ fn main() {
         drop_rate: sim.n_dropped as f64/sim.time,
         timedout_frac: n_processed_to as f64/(sim.n_dropped + sim.n_processed) as f64,
     };
+    //println!("sim {}", json::as_pretty_json(&sim));
     println!("{}", json::as_pretty_json(&sim_res));
 }

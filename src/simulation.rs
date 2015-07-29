@@ -1,5 +1,4 @@
 use std::rc::Rc;
-use std::rc::weak_count;
 use std::cell::RefCell;
 use std::collections::BinaryHeap;
 use std::collections::VecDeque;
@@ -152,7 +151,7 @@ pub fn run(sys: &SystemParams) -> SystemMetrics {
                 sim.wt_sum_reqs_in_sys += (sim.time - reqs_in_sys.last_mod_ts)*reqs_in_sys.count as f64;
                 reqs_in_sys.count -= 1;
                 reqs_in_sys.last_mod_ts = sim.time;
-                if weak_count(&rc_req) > 0 { // Request was not timed out
+                if Rc::weak_count(&rc_req) > 0 { // Request was not timed out
                     let arrival_ts = sim.time + sample_zero_lo(&think_sampler, &mut rng);
                     let total_service = service_sampler.ind_sample(&mut rng);
                     let timeout = timeout_sampler.ind_sample(&mut rng);
